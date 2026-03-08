@@ -28,11 +28,12 @@ const userSchema = new Schema({
   },
   email: {
     type: String,
+    required: true,
+    unique: true
   },
   password: {
     type: String,
-    required: true,
-    select: false
+    required: true
   },
   currentClass: {
     type: String,
@@ -46,7 +47,7 @@ const userSchema = new Schema({
     required: true,
     unique: true,
     default(){
-      return generateId(3, 'GU-')
+      return generateId(6, 'GU-', true)
     }
   },
   isPaymentActive: {
@@ -121,7 +122,7 @@ userSchema.statics.createUser = async function(params = {}){
 
 userSchema.statics.getUserByUserId = async function(userId = null){
   try{
-    const user = await this.findOne({userId, isDeleted: false, isActive: true});
+    const user = await this.findOne({userId, isDeleted: false, isEmailVerified: true});
     if(user){
       return {
         success: true,
@@ -142,7 +143,7 @@ userSchema.statics.getUserByUserId = async function(userId = null){
 }
 userSchema.statics.login = async function(email, password){
   try{
-    const user = await this.findOne({email, isDeleted: false, isActive: true});
+    const user = await this.findOne({email, isDeleted: false, isEmailVerified: true, status: USER_STATUS.ACTIVE});
     if(user){
       const isMatch = await bcrypt.compare(password, user.password);
       if(isMatch){
@@ -255,6 +256,27 @@ userSchema.pre('save', async function(next){
     next();
   }
 })
+// userSchema.set('toObject', (
+//   {
+//     virtuals: true,
+//     versionKey: false,
+//     transform: (doc, ret) => {
+//       delete ret.password;
+//       return ret;
+//     }
+//   }
+// ));
+userSchema.set('toJSON', (
+  {
+    virtuals: true,
+    versionKey: false,
+    transform: (doc, ret) => {
+      delete ret.password;
+      return ret;
+    }
+  }
+));
+
 
 userSchema.statics.getAllUsers = async function(params = {}){
   try{
@@ -264,7 +286,7 @@ userSchema.statics.getAllUsers = async function(params = {}){
     const queryParam = {
       isDeleted: false,
       isSystem: false,
-      isActive: true
+      isEmailVerified: true
     }
 
     if (provider) {
@@ -298,7 +320,7 @@ userSchema.statics.getAllUsers = async function(params = {}){
 userSchema.statics.getAllUsersByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, provider, durationType, isSystem, amount, description, name, isActive } = params;
+    const { pageNum:page = 1, pageSize = 10, provider, durationType, isSystem, amount, description, name, isEmailVerified } = params;
 
     const queryParam = {
       isDeleted: false
@@ -312,8 +334,8 @@ userSchema.statics.getAllUsersByAdmin = async function(params = {}){
       queryParam.isSystem = isSystem;
     }
     
-    if (typeof isActive !== 'undefined') {
-      queryParam.isActive = isActive;
+    if (typeof isEmailVerified !== 'undefined') {
+      queryParam.isEmailVerified = isEmailVerified;
     }
 
     if (durationType) {
