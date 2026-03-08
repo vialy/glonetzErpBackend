@@ -8,7 +8,5 @@ export const mainMiddleware = (req, res, next) => {
   next();
 };
 export const pageNotFoundMiddleware = (req, res, next) => {
-  req.$t = (key) => getTranslation(req, key); 
-  console.log(`${req.method} ${req.url}`);
   return apiResponse.failed(res, req.$t('Page not found'), 404);
 };

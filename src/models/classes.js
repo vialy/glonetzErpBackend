@@ -44,11 +44,6 @@ const classSchema = new Schema({
     type: Number,
     default: 30 /* default validity duration for payments in days */
    },
-  paymentValidityDurationType: {
-    type: String,
-    default: "DAY",
-    enum: ["DAY", "WEEK", "MONTH"]
-  },
   description: {
     type: nameSchema,
     required: true

@@ -1,8 +1,10 @@
 import config from "../config/index.js";
 import paymentsModel, { paymentStatus } from "../models/payments.js";
 import userModel from "../models/users.js"
+import classModel from "../models/classes.js";
 import apiResponse from "../utils/api.response.js";
 import request from "../utils/request.js";
+import { createRequest } from "../utils/tranzak-services.js";
 
 const paymentsController = {
   async purchaseAirtime(req, res, next) {
@@ -16,72 +18,67 @@ const paymentsController = {
   },
   async createPayment(req, res) {
     try{
-      const { classId, amount, phone } = req.body;
+      const { classId, phone } = req.body;
 
-      const { userId } = req.userInfo;
+      const { userId, _id: userObjectId } = req.userInfo;
 
-      console.log('uSERID =======================>', userId)
-
-      if(!userId) {
-        return apiResponse.failed(res, req.$t('userId is required'), 400);
+      
+      if(!classId) {
+        return apiResponse.failed(res, req.$t('Class is required'), 400);
+      }
+      
+      if(!classId) {
+        return apiResponse.failed(res, req.$t('Class is required'), 400);
       }
 
-      const user = await userModel.getUserByUserId(userId);
-
-      if(!user){
-        return apiResponse.failed(res, req.$t('User not available'), 404);
-      }
-
-      if(!phone){
-        return apiResponse.failed(res, req.$t('Phone number is required'), 404);
+      const classInfo = await classModel.getClassByClassId(classId);
+      
+      if(!classInfo){
+        return apiResponse.failed(res, req.$t('Class not found'), 404);
       }
 
       const params = {
         userId,
         phone,
         classId,
-        user: user.id,
-        routine: user.routine,
-        amount: user.amount,
-        description: `Purchase - ${user.name}`
+        user: userObjectId,
+        amount: classInfo.price,
+        currencyCode: classInfo.currencyCode,
+        duration: classInfo.paymentValidityDuration,
+        description: `Payment for - ${classInfo.name}`
       }
 
-      const payment = await paymentsModel.createPayment(params);
+      let payment = await paymentsModel.createPayment(params);
 
-      if (payment) {
+      if (payment.success) {
 
         /**
-         * Authorize for payment
+         * Call Tranzak service to initiate payment
          */
 
-        const path = `/v1/services${config.authService.authRequestCallbackPath}${payment.paymentId}`;
 
         const paymentData = {
           amount: payment.amount,
-          phone: payment.phone,
+          mobileWalletNumber: payment.phone,
+          mchTransactionRef: payment.paymentId,
           description: payment.description,
-          callbackUrl: `${config.server.baseUrl}${path}`
+          currencyCode: payment.currencyCode,
+          callbackUrl: `${config.server.baseUrl}/api/payments/tranzak-callback`
+        }
+
+        const tranzakResponse = await createRequest(paymentData);
+
+        if(tranzakResponse.success){
+          const params = {
+            partnerTransactionId: tranzakResponse.data.requestId,
+            paymentId: payment.paymentId,
+            providerResponse: tranzakResponse.data
+          }
+          payment = await paymentsModel.markAsProcessing(params);
+        }else{
+          payment = await paymentsModel.markAsFailed({ paymentId: payment.paymentId, errorMessage: "Failed to initiate payment" })
         }
         
-
-        try {
-          const authResponse = await request.post(config.tranzak.CREATE_REQUEST, paymentData);
-
-
-
-          console.log("Data here", authResponse)
-
-          if(authResponse){
-
-            await paymentsModel.updatedForPendingApproval( { paymentId: payment.paymentId, serviceId: authResponse.id});
-
-            return apiResponse.success(res, {challenge: { ...authResponse}, payment});
-            
-          }
-          
-        }catch(errr){
-          console.log(errr)
-        }
         
         return apiResponse.success(res, { payment });
 

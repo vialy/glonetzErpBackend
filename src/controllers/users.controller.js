@@ -99,8 +99,9 @@ const usersController = {
       const newUser = await usersModel.login(email, password);
 
       if (newUser && newUser.success) {
+        const { userId, _id} = newUser.data;
         const token = jsonwebtoken.sign(
-          { userId: newUser.data.userId },
+          { userId, _id },
           config.jwt.secret,
           { expiresIn: config.jwt.expiresIn }
         );

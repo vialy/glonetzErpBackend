@@ -5,15 +5,12 @@ import { mainMiddleware, pageNotFoundMiddleware } from './middlewares/main.middl
 
 import config from './config/index.js';
 import "./config/mongo.js";
-// import "./config/gsm.mongo.js";
 import { createDefaultUsers } from './models/seeders/index.js';
 
 
-// const cors = require('cors')
 const app = express();
 
 app.use(cors())
-
 
 
 app.use(express.json());

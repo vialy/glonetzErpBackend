@@ -31,7 +31,7 @@ const paymentSchema = new Schema({
   },
   provider: {
     type: String,
-    required: true,
+    default: providers.TRANZAK,
     enum: Object.values(providers)
   },
   duration: {
@@ -73,6 +73,10 @@ const paymentSchema = new Schema({
   },
   errorMessage: {
     type: String
+  },
+  phone: {
+    type: String,
+    required: true
   },
   user: {
     type: String,
@@ -142,7 +146,7 @@ paymentSchema.statics.createPayment = async function(params = {}){
 }
 
 paymentSchema.statics.markAsProcessing = async function(params = {}){
-  const { partnerTransactionId, paymentId, status, providerResponse } = params;
+  const { partnerTransactionId, paymentId, providerResponse } = params;
   try{
     const payment = await this.findOne({paymentId});
     if(payment){

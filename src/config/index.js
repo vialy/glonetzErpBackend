@@ -8,18 +8,18 @@ export default{
     createAuthRequestPath: '/sapi/auth/challenge/create',
     getAuthRequestPath: '/sapi/auth/challenge/consume'
   }),
-  tranzak: Object.freeze({
-    token: '',
-    sandboxToken: '',
-    appId: process.env.TRANZAK_APP_ID,
-    appKey: process.env.TRANZAK_APP_KEY,
-    sandBoxAppId: process.env.TRANZAK_SANDBOX_APP_ID,
-    sandBoxAppKey: process.env.TRANZAK_SANDBOX_APP_KEY,
-    BASE_URL: "http://dsapi.tranzak.me",
-    SANDBOX_BASE_URL: "http://sandbox.dsapi.tranzak.me",
-    CREATE_REQUEST: '/request/create-mobile-wallet-charge',
-    GET_REQUEST: '/request/details'
-  }),
+  tranzak: (() => {
+    const baseUrl = process.env.TRANZAK_BASE_URL || "http://dsapi.tranzak.me";
+    return Object.freeze({
+      token: '',
+      appId: process.env.TRANZAK_APP_ID,
+      appKey: process.env.TRANZAK_APP_KEY,
+      BASE_URL: baseUrl,
+      CREATE_REQUEST: '/xp021/request/create-mobile-wallet-charge',
+      GET_REQUEST: '/xp021/request/details?requestId=',
+      GENERATE_TOKEN: '/auth/token'
+    })
+  })(),
   walletUrls: Object.freeze({
     BASE_URL: 'http://localhost:5001/v1',
     DEBIT_USER: '/services/transaction/debit',
