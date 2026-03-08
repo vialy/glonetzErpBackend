@@ -1,0 +1,13 @@
+{
+  "welcome": "Welcome to our API",
+  "Page not found": "Page not found",
+  "User not found": "User not found",
+  "Failed to fetch users": "Failed to fetch users",
+  "Failed to delete user": "Failed to delete user",
+  "Failed to update user": "Failed to update user",
+  "Failed to fetch user by email": "Failed to fetch user by email",
+  "Failed to fetch user by ID": "Failed to fetch user by ID",
+  "Failed to create user account": "Failed to create user account",
+  "User already exists with this email": "User already exists with this email",
+  "goodbye": "Thank you for using our API"
+}

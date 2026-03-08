@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+
+/*
+    MySQL 8.0+ is required for full Prisma support.
+    If you're using an older version, you can set the provider to "mysql" instead of "mysql8".
+    However, some features will not be supported.
+    See the documentation for details: https://pris.ly/d/mysql-versions
+
+    Run this command to set default storage engine to InnoDB if it's not already set:
+    ALTER DATABASE your_database_name_here DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+    SET default_storage_engine = InnoDB;
+
+*/
+
+
+
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  userId    String
+  deleted   Boolean @default(false)
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+  
+  @@index([userId])
+}
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  narration    String @default("")
+  type      String // CREDIT or DEBIT
+  transactionId String
+  amount    Decimal @default("0.00") @db.Decimal(20,2)
+  deleted   Boolean @default(false)
+  openingBalance    Decimal @default("0.00") @db.Decimal(20,2)
+  closingBalance    Decimal @default("0.00") @db.Decimal(20,2)
+  currencyCode String @default("XAF")
+  reference String ?
+  accountId Int
+  status Int @default(10) // 10: pending, 20: processing, 30: successful, -30: failed,
+  createdAt DateTime @default(now())
+  completedAt DateTime ?
+  updatedAt DateTime @updatedAt @default(now())
+
+  @@index([createdAt])
+  @@index([narration])
+  @@index([userId])
+  @@index([reference])
+  @@index([transactionId])
+  @@index([amount])
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model Account {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  accountId String
+  narration String @default("")
+  deleted   Boolean @default(false)
+  balance   Decimal @default("0.00") @db.Decimal(20,2)
+  type      String @default("primary")
+  currencyCode String @default("XAF")
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt @default(now())
+
+  transactions Transaction[]
+
+  @@index([accountId])
+  @@index([createdAt])
+  @@index([narration])
+  @@index([userId])
+  @@index([type])
+  @@index([balance])
+}
