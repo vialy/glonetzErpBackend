@@ -1,59 +1,83 @@
 import config from "../config/index.js";
 import usersModel from "../models/users.js";
 import apiResponse from "../utils/api.response.js";
-import { validateEmail } from "../utils/index.js";
+import { generatePassword, validateEmail } from "../utils/index.js";
+
+import { sendEmail } from "../utils/email/sendEmail.js";
+import { otpEmailTemplate } from "../utils/email/templates.js";
 
 import jsonwebtoken from "jsonwebtoken";
 
 const usersController = {
   async createUser(req, res) {
+    const params = req.body;
+
+    // if(!userId) {
+    //   return apiResponse.failed(res, req.$t('userId is required'), 400);
+    // }
+
+    if(!params.name){
+      return apiResponse.failed(res, req.$t('Name is required'));
+    }
+    if(!params.email){
+      return apiResponse.failed(res, req.$t('Email is required'));
+    }
+    if(!params.phone){
+      return apiResponse.failed(res, req.$t('Phone number is required'));
+    }
+    // if(!params.password){
+    //   return apiResponse.failed(res, req.$t('Password is required'));
+    // }
+
+    if(!validateEmail(params.email)){
+      return apiResponse.failed(res, req.$t('Invalid email address'));
+    }
+
+    params.password = generatePassword(14);
+
+    let newUser;
+
     try{
-      const params = req.body;
 
-      // if(!userId) {
-      //   return apiResponse.failed(res, req.$t('userId is required'), 400);
-      // }
-
-      if(!params.name){
-        return apiResponse.failed(res, req.$t('Name is required'));
-      }
-      if(!params.email){
-        return apiResponse.failed(res, req.$t('Email is required'));
-      }
-      if(!params.phone){
-        return apiResponse.failed(res, req.$t('Phone number is required'));
-      }
-      if(!params.password){
-        return apiResponse.failed(res, req.$t('Password is required'));
-      }
-
-      if(!validateEmail(params.email)){
-        return apiResponse.failed(res, req.$t('Invalid email address'));
-      }
-
-      const newUser = await usersModel.createUser({
+      newUser = await usersModel.createUser({
         name: params.name,
         phone: params.phone,
         email: params.email,
         password: params.password,
       });
-
-      if (newUser && newUser.success) {
-
-        /**
-         * Call SMS service to send SMS to user with their password and other details
-         */
-
-        return apiResponse.success(res, newUser.data);
-
-      }
-
-      return apiResponse.failed(res, newUser?.message || req.$t('Failed to create user'));
-
+      
     }catch(error){
       console.error("Error in controller:", error);
       return apiResponse.failed(res, req.$t('Failed to create user'));
     }
+
+    if (newUser && newUser.success) {
+
+      /**
+       * Call email service to send welcome email to user
+       */
+      try{
+        const template = otpEmailTemplate({
+          name: params.name,
+          code: params.password,
+        });
+  
+        const result = await sendEmail({
+          to: "user@example.com",
+          subject: template.subject,
+          html: template.html,
+          text: template.text,
+        });
+      }catch(error){
+        console.error("Error sending email:", error);
+      }
+
+
+      return apiResponse.success(res, {...newUser.data, params: {password: params.password}});
+
+    }
+
+    return apiResponse.failed(res, newUser?.message || req.$t('Failed to create user'));
   },
   async updateUser(req, res) {
     try{

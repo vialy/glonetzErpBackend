@@ -55,3 +55,61 @@ export function doActionWithinTimeFrame( callback = e=>{}, params = {}, startTim
 export function policyProcessor(user = {}){
   
 }
+
+// utils/generatePassword.js
+
+export function generatePassword({
+  length = 12,
+  uppercase = true,
+  lowercase = true,
+  numbers = true,
+  symbols = true,
+  excludeSimilar = false, // removes chars like O, 0, l, 1, I
+} = {}) {
+  if (length < 4) {
+    throw new Error("Password length must be at least 4");
+  }
+
+  let upperChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let lowerChars = "abcdefghijklmnopqrstuvwxyz";
+  let numberChars = "0123456789";
+  let symbolChars = "!@#$%^&*()_+[]{}<>?/|~-=";
+
+  if (excludeSimilar) {
+    upperChars = upperChars.replace(/[OI]/g, "");
+    lowerChars = lowerChars.replace(/[l]/g, "");
+    numberChars = numberChars.replace(/[01]/g, "");
+  }
+
+  const selectedSets = [];
+
+  if (uppercase) selectedSets.push(upperChars);
+  if (lowercase) selectedSets.push(lowerChars);
+  if (numbers) selectedSets.push(numberChars);
+  if (symbols) selectedSets.push(symbolChars);
+
+  if (selectedSets.length === 0) {
+    throw new Error("At least one character type must be enabled");
+  }
+
+  // Ensure password includes at least one char from each selected set
+  const passwordChars = selectedSets.map(getRandomChar);
+
+  // Build the full character pool
+  const allChars = selectedSets.join("");
+
+  while (passwordChars.length < length) {
+    passwordChars.push(getRandomChar(allChars));
+  }
+
+  // Shuffle so required chars aren't always at the beginning
+  return shuffleArray(passwordChars).join("");
+}
+
+function getRandomChar(charset) {
+  return charset[Math.floor(Math.random() * charset.length)];
+}
+
+function shuffleArray(array) {
+  return [...array].sort(() => Math.random() - 0.5);
+}
