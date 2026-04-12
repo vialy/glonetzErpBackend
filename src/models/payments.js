@@ -69,7 +69,7 @@ const paymentSchema = new Schema({
     required: true
   },
   providerResponse: {
-    type: String
+    type: [String]
   },
   errorMessage: {
     type: String
@@ -152,8 +152,9 @@ paymentSchema.statics.markAsProcessing = async function(params = {}){
     if(payment){
       payment.status = paymentStatus.PROCESSING;
       payment.partnerTransactionId = partnerTransactionId? partnerTransactionId: payment.partnerTransactionId;
-      payment.providerResponse = providerResponse? JSON.stringify(providerResponse): payment.providerResponse;
-
+      if(providerResponse){
+        payment.providerResponse.push(JSON.stringify(providerResponse));
+      }
       const newPayment = await payment.save();
 
       if(newPayment){
@@ -183,7 +184,9 @@ paymentSchema.statics.markAsFailed = async function(params = {}){
     const payment = await this.findOne({paymentId});
     if(payment){
       payment.status = paymentStatus.FAILED;
-      payment.providerResponse = JSON.stringify(providerResponse);
+      if(providerResponse){
+        payment.providerResponse.push(JSON.stringify(providerResponse));
+      }
       payment.errorMessage = errorMessage;
       
       const newPayment = await payment.save();
@@ -216,7 +219,9 @@ paymentSchema.statics.markAsSuccessful = async function(params = {}){
     if(payment){
 
       payment.status = paymentStatus.SUCCESSFUL;
-      payment.providerResponse = JSON.stringify(providerResponse);
+      if(providerResponse){
+        payment.providerResponse.push(JSON.stringify(providerResponse));
+      }
 
       const newPayment = await payment.save();
 

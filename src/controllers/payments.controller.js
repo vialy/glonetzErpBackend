@@ -7,15 +7,6 @@ import request from "../utils/request.js";
 import { createRequest } from "../utils/tranzak-services.js";
 
 const paymentsController = {
-  async purchaseAirtime(req, res, next) {
-    const { body } = req;
-    req.body = {
-      userId: config.userConfig.defaultAirtimeUserId,
-      amount: body.amount,
-      phone: body.phone
-    }
-    next();
-  },
   async createPayment(req, res) {
     try{
       const { classId, phone } = req.body;

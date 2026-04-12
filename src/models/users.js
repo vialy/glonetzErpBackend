@@ -165,6 +165,36 @@ userSchema.statics.login = async function(email, password){
     }
   }
 }
+/**
+ * 
+ * @param {String[]} users 
+ * @param {String} params.class 
+ * @returns 
+ */
+userSchema.statics.promoteMany = async function(users = [], params = {}) {
+  try {
+    console.log("Updating users:", users, params);
+
+    const result = await this.updateMany(
+      { userId: { $in: users }, isDeleted: false }, 
+      { $set: { currentClass: params.class, classId: params.classId, isPaymentActive: false } }
+    );
+
+    return {
+      success: true,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
+    };
+
+  } catch (e) {
+    console.log("Error:", e);
+    return {
+      success: false,
+      message: "An error occurred while updating users"
+    };
+  }
+};
+
 
 userSchema.statics.updateUser = async function(userId, params = {}){
   try{

@@ -1,5 +1,6 @@
 import express from 'express';
 import usersController from '../controllers/users.controller.js'
+import claimController from '../controllers/claims.controller.js'
 // import staffController from '../controllers/staff.controller.js'
 import paymentsController from '../controllers/payments.controller.js'
 
@@ -29,8 +30,23 @@ router.post('/users/list', usersController.getAllUsers);
 
 
 
+/**
+ * Payment routes
+ */
 router.post('/payments/list', paymentsController.getAllPaymentsByAdmin);
 router.get('/payments/:id', paymentsController.getPaymentById);
+
+
+
+
+/**
+ * Claim routes
+ */
+router.post('/claim/list', claimController.getAllClaimsByAdmin);
+router.get('/claim/:id', claimController.getClaimById);
+router.post('/claim/fail/:id', claimController.onMarkPaymentAsFailed);
+router.post('/claim/process/:id', claimController.onMarkPaymentAsProcessing);
+router.post('/claim/success/:id', claimController.onMarkPaymentAsSuccessful);
 
 
 export default router;

@@ -50,6 +50,7 @@ const transactionSchema = new Schema({
   },
   fee: {
     type: Number,
+    default: 0,
     required: true
   },
   currencyCode: {
@@ -82,6 +83,12 @@ const transactionSchema = new Schema({
     type: String,
     required: true
   },
+  senderId: {
+    type: String,
+  },
+  receiverId: {
+    type: String,
+  },
   accountId: {
     type: String,
     required: true
@@ -98,8 +105,31 @@ const transactionSchema = new Schema({
 
 transactionSchema.index({transactionId: 1, accountId: 1, userId: 1, serviceId: 1 });
 
+transactionSchema.index({transactionId: 1, userId: 1}, { unique: true });
+
 transactionSchema.plugin(mongoosePaginate);
 
+transactionSchema.statics.getTransactionByServiceId = async function(serviceId = null){
+  try{
+    const transaction = await this.findOne({serviceId});
+    if(transaction){
+      return {
+        success: true,
+        data: transaction
+      }
+    }
+    return {
+      success: false,
+      message: "Transaction not found"
+    }
+  }catch(e){
+    console.log(e);
+    return {
+      success: false,
+      message: "An error occurred while fetching the transaction"
+    }
+  }
+}
 transactionSchema.statics.getTransactionByTransactionId = async function(transactionId = null){
   try{
     const transaction = await this.findOne({transactionId, isDeleted: false});

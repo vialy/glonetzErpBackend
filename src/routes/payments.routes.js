@@ -6,7 +6,7 @@ import { decodeUserToken } from '../middlewares/auth.middleware.js';
 const router = express.Router();
 
 router.post('/create', decodeUserToken, paymentsController.createPayment);
-router.post('/airtime', decodeUserToken, paymentsController.purchaseAirtime,  paymentsController.createPayment);
+router.post('/airtime', decodeUserToken,  paymentsController.createPayment);
 router.post('/list', decodeUserToken, paymentsController.getAllPayments);
 // router.post('/list-admin', paymentsController.getAllPaymentsByAdmin);
 router.get('/detail/:id', decodeUserToken, paymentsController.getPaymentById);

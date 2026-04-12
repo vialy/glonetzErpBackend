@@ -20,15 +20,6 @@ export default{
       GENERATE_TOKEN: '/auth/token'
     })
   })(),
-  walletUrls: Object.freeze({
-    BASE_URL: 'http://localhost:5001/v1',
-    DEBIT_USER: '/services/transaction/debit',
-    REFUND_USER: '/services/transaction/refund'
-  }),
-  camtelUrls: Object.freeze({
-    BASE_URL: 'http://localhost:5000/v1',
-    BUY_BUNDLE: '/users/purchase'
-  }),
   server: {
     port: process.env.PORT || 4050,
     baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 4050}`
@@ -45,10 +36,11 @@ export default{
   },
   systemUser: {
     userId: "system_user",
-    accountId: "system_account"
+    platformPayment: "platform_payment",
+    accountId: "system_account",
   },
   userConfig: Object.freeze({
-    defaultAirtimeUserId: 'BB-00001'
+
   }),
   db: {
     url: process.env.MONGO_URI,
