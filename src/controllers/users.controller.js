@@ -73,7 +73,7 @@ const usersController = {
       }
 
 
-      return apiResponse.success(res, {...newUser.data, params: {password: params.password}});
+      return apiResponse.success(res, {user: newUser.data, params: {password: params.password}});
 
     }
 
@@ -256,13 +256,26 @@ const usersController = {
       return apiResponse.failed(res, req.$t('Failed to fetch user by ID'));
     }
   },
-  async getAllUsers(req, res) {
+  async getAllUsersByAdmin(req, res) {
     // if(1<2) throw new BusinessError('Your account balance is sahhh!', {code: 'balance_small', httpCode: 499});
     try{
       const body = req.body;
-      const users = await usersModel.getAllUsers(body);
+      const users = await usersModel.getAllUsersByAdmin(body);
       if (users) {
         return apiResponse.success(res, users);
+      }
+      return apiResponse.failed(res, req.$t('Failed to fetch users'));
+    }catch(error){
+      console.error("Error in controller:", error);
+      return apiResponse.failed(res, req.$t('Failed to fetch users'));
+    }
+  },
+  async promoteUsers(req, res) {
+    try{
+      const body = req.body;
+      const users = await usersModel.promoteMany(body.users, {classId: body.classId});
+      if (users.success) {
+        return apiResponse.success(res, {message:users.message});
       }
       return apiResponse.failed(res, req.$t('Failed to fetch users'));
     }catch(error){

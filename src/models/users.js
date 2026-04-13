@@ -35,10 +35,6 @@ const userSchema = new Schema({
     type: String,
     required: true
   },
-  currentClass: {
-    type: String,
-    ref: 'class'
-  },
   classId: {
     type: String,
   },
@@ -177,14 +173,25 @@ userSchema.statics.promoteMany = async function(users = [], params = {}) {
 
     const result = await this.updateMany(
       { userId: { $in: users }, isDeleted: false }, 
-      { $set: { currentClass: params.class, classId: params.classId, isPaymentActive: false } }
+      { $set: { classId: params.classId, isPaymentActive: false } }
     );
 
+    if(result.modifiedCount > 0){
+      return {
+        success: true,
+        message: `${result.modifiedCount} users promoted successfully`
+      }
+    }
+
+    // return {
+    //   success: true,
+    //   matchedCount: result.matchedCount,
+    //   modifiedCount: result.modifiedCount
+    // };
     return {
-      success: true,
-      matchedCount: result.matchedCount,
-      modifiedCount: result.modifiedCount
-    };
+      success: false,
+      message: "No users were promoted"
+    }
 
   } catch (e) {
     console.log("Error:", e);
@@ -350,30 +357,23 @@ userSchema.statics.getAllUsers = async function(params = {}){
 userSchema.statics.getAllUsersByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, provider, durationType, isSystem, amount, description, name, isEmailVerified } = params;
+    const { pageNum:page = 1, pageSize = 10, email, phone, description, name, isEmailVerified } = params;
 
     const queryParam = {
       isDeleted: false
     }
 
-    if (provider) {
-      queryParam.provider = provider;
+    if (email) {
+      queryParam.email = email;
     }
     
-    if (typeof isSystem !== 'undefined') {
-      queryParam.isSystem = isSystem;
-    }
     
     if (typeof isEmailVerified !== 'undefined') {
       queryParam.isEmailVerified = isEmailVerified;
     }
 
-    if (durationType) {
-      queryParam.durationType = durationType;
-    }
-
-    if (amount) {
-      queryParam.amount = amount;
+    if (phone) {
+      queryParam.phone = phone;
     }
 
     if (description) {

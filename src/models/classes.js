@@ -5,18 +5,6 @@ import { formatPaginatedData, generateId } from '../utils/index.js';
 import config from '../config/index.js';
 
 
-const nameSchema = new Schema({
-  _id: false,
-  en:{
-    type: String,
-    default: ""
-  },
-  fr:{
-    type: String,
-    default: ""
-  }
-})
-
 const classSchema = new Schema({
   name: {
     type: String,
@@ -45,7 +33,7 @@ const classSchema = new Schema({
     default: 30 /* default validity duration for payments in days */
    },
   description: {
-    type: nameSchema,
+    type: String,
     required: true
   },
   startDate: {
@@ -59,6 +47,14 @@ const classSchema = new Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  createdBy: {
+    type: String,
+    required: true
+  },
+  lastUpdatedBy: {
+    type: String,
+    required: true
   },
   deleted: {
     type: Boolean,
@@ -78,12 +74,21 @@ classSchema.statics.createClass = async function(params = {}){
   try{
     const model =  await this.create(params);
     if(model){
-      return model
+      return {
+        success: true,
+        data: model
+      }
     }
-    return null
+    return {
+      success: false,
+      message: "Failed to create class"
+    }
   }catch(e){
     console.log(e);
-    return null
+    return {
+      success: false,
+      message: "An error occurred while creating the class"
+    }
   }
 }
 
@@ -91,12 +96,21 @@ classSchema.statics.getClassByClassId = async function(classId = null){
   try{
     const model =  await this.findOne({classId, deleted: false, isActive: true});
     if(model){
-      return model
+      return {
+        success: true,
+        data: model
+      }
     }
-    return null
+    return {
+      success: false,
+      message: "Class not found"
+    }
   }catch(e){
     console.log(e);
-    return null
+    return {
+      success: false,
+      message: "An error occurred while fetching the class"
+    }
   }
 }
 
@@ -104,6 +118,7 @@ classSchema.statics.updateClass = async function(classId, params = {}){
   try{
     delete params.createdAt;
     delete params.updatedAt;
+    delete params.createdBy;
     delete params.deleted;
     let model =  await this.findOne({classId, deleted: false});
     if(model){
@@ -111,12 +126,23 @@ classSchema.statics.updateClass = async function(classId, params = {}){
         model[e] = params[e];
       })
       model =  await model.save();
-      if(model) return model;
+      if(model){
+        return {
+          success: true,
+          data: model
+        }
+      }
     }
-    return null
+    return {
+      success: false,
+      message: "Class not found"
+    }
   }catch(e){
     console.log(e);
-    return null
+    return {
+      success: false,
+      message: "An error occurred while updating the class"
+    }
   }
 }
 classSchema.statics.deleteClass = async function(classId){
@@ -125,12 +151,23 @@ classSchema.statics.deleteClass = async function(classId){
     if(model){
       model.deleted = true;
       model =  await model.save();
-      if(model) return model;
+      if(model){
+        return {
+          success: true,
+          data: model
+        }
+      }
     }
-    return null
+    return {
+      success: false,
+      message: "Class not found"
+    }
   }catch(e){
     console.log(e);
-    return null
+    return {
+      success: false,
+      message: "An error occurred while deleting the class"
+    }
   }
 }
 
@@ -181,17 +218,11 @@ classSchema.statics.getAllClassesByAdmin = async function(params = {}){
     }
 
     if (description) {
-      queryParam.$or = [
-        { 'description.en': { $regex: `.*${description}.*`, $options: "i" }},
-        { 'description.fr': { $regex: `.*${description}.*`, $options: "i" }}
-      ];
+      queryParam.description = { $regex: `.*${description}.*`, $options: "i" };
     }
 
     if (name) {
-      queryParam.$or = [
-        { 'name.en': { $regex: `.*${name}.*`, $options: "i" }},
-        { 'name.fr': { $regex: `.*${name}.*`, $options: "i" }}
-      ];
+      queryParam.name =  { $regex: `.*${name}.*`, $options: "i" };
     }
 
     const result = await this.paginate(queryParam, { page, limit: pageSize, sort: "-createdAt" });

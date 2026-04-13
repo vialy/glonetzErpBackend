@@ -20,6 +20,9 @@ export const decodeUserToken = (req, res, next)=>{
 export const decodeAdminToken = (req, res, next)=>{
   try{
     req.isAdmin = true;
+    req.userInfo = {
+      userId: "system"
+    };
     next(); 
   }catch(e){
     console.log(e);

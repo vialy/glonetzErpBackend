@@ -17,10 +17,8 @@ export default {
     const responseData = {
       data: null,
       success: false,
-      error: {
-        msg,
-        code
-      }
+      errorMsg: msg,
+      errorCode: code
     }
     res.status(200).json(responseData);
   },
