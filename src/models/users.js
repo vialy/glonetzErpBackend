@@ -118,7 +118,7 @@ userSchema.statics.createUser = async function(params = {}){
 
 userSchema.statics.getUserByUserId = async function(userId = null){
   try{
-    const user = await this.findOne({userId, isDeleted: false, isEmailVerified: true});
+    const user = await this.findOne({userId, isDeleted: false});
     if(user){
       return {
         success: true,
@@ -137,9 +137,13 @@ userSchema.statics.getUserByUserId = async function(userId = null){
     }
   }
 }
-userSchema.statics.login = async function(email, password){
+userSchema.statics.login = async function({email, password, phone}){
   try{
-    const user = await this.findOne({email, isDeleted: false, isEmailVerified: true, status: USER_STATUS.ACTIVE});
+    const params = {};
+    if(email) params.email = email;
+    else if(phone) params.phone = phone;
+    const user = await this.findOne({...params, isDeleted: false});
+    // @@UNBLOCK const user = await this.findOne({$or: [{email}, {phone}], isDeleted: false, isEmailVerified: true, status: USER_STATUS.ACTIVE});
     if(user){
       const isMatch = await bcrypt.compare(password, user.password);
       if(isMatch){
@@ -318,7 +322,7 @@ userSchema.set('toJSON', (
 userSchema.statics.getAllUsers = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, provider, durationType, amount, description, name,  } = params;
+    const { pageNum:page = 1, pageSize = 10, provider, durationType, amount, description, name, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -329,6 +333,11 @@ userSchema.statics.getAllUsers = async function(params = {}){
     if (provider) {
       queryParam.provider = provider;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (durationType) {
       queryParam.durationType = durationType;
@@ -357,7 +366,7 @@ userSchema.statics.getAllUsers = async function(params = {}){
 userSchema.statics.getAllUsersByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, email, phone, description, name, isEmailVerified } = params;
+    const { pageNum:page = 1, pageSize = 10, email, phone, description, name, isEmailVerified, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
@@ -367,6 +376,10 @@ userSchema.statics.getAllUsersByAdmin = async function(params = {}){
       queryParam.email = email;
     }
     
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
     
     if (typeof isEmailVerified !== 'undefined') {
       queryParam.isEmailVerified = isEmailVerified;

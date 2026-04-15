@@ -1,6 +1,8 @@
 import config from "../config/index.js";
 import apiResponse from "../utils/api.response.js";
+import jsonwebtoken from "jsonwebtoken";
 export const decodeUserToken = (req, res, next)=>{
+  console.log("Decoding user token...");
   try{
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];

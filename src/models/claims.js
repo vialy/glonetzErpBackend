@@ -228,7 +228,7 @@ claimSchema.statics.markAsSuccessful = async function(params = {}){
 claimSchema.statics.getAllClaims = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, claimId, status, userId, amount, description, operatorReference } = params;
+    const { pageNum:page = 1, pageSize = 10, claimId, status, userId, amount, description, operatorReference, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -252,6 +252,11 @@ claimSchema.statics.getAllClaims = async function(params = {}){
       queryParam.amount = amount;
     }
 
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
+
     if (description) {
       queryParam.description = { $regex: `.*${description}.*`, $options: "i" };
     }
@@ -267,7 +272,7 @@ claimSchema.statics.getAllClaims = async function(params = {}){
 claimSchema.statics.getAllClaimsByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, claimId, operatorReference } = params;
+    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, claimId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
@@ -292,6 +297,11 @@ claimSchema.statics.getAllClaimsByAdmin = async function(params = {}){
     if (amount) {
       queryParam.amount = amount;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (description) {
       queryParam.description = { $regex: `.*${description}.*`, $options: "i" };

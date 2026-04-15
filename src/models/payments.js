@@ -248,7 +248,7 @@ paymentSchema.statics.markAsSuccessful = async function(params = {}){
 paymentSchema.statics.getAllPayments = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, paymentId, status, userId, amount, description, classId } = params;
+    const { pageNum:page = 1, pageSize = 10, paymentId, status, userId, amount, description, classId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -258,6 +258,11 @@ paymentSchema.statics.getAllPayments = async function(params = {}){
     if (paymentId) {
       queryParam.paymentId = paymentId;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (classId) {
       queryParam.classId = classId;
@@ -287,7 +292,7 @@ paymentSchema.statics.getAllPayments = async function(params = {}){
 paymentSchema.statics.getAllPaymentsByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, paymentId, classId } = params;
+    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, paymentId, classId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
@@ -296,6 +301,11 @@ paymentSchema.statics.getAllPaymentsByAdmin = async function(params = {}){
     if (userId) {
       queryParam.userId = userId;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (classId) {
       queryParam.classId = classId;

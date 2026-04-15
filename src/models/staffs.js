@@ -221,7 +221,7 @@ userSchema.pre('save', async function(next){
 userSchema.statics.getAllUsers = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, provider, durationType, amount, description, name,  } = params;
+    const { pageNum:page = 1, pageSize = 10, provider, durationType, amount, description, name, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -232,6 +232,11 @@ userSchema.statics.getAllUsers = async function(params = {}){
     if (provider) {
       queryParam.provider = provider;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (durationType) {
       queryParam.durationType = durationType;
@@ -260,7 +265,7 @@ userSchema.statics.getAllUsers = async function(params = {}){
 userSchema.statics.getAllUsersByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, provider, durationType, isSystem, amount, description, name, isActive } = params;
+    const { pageNum:page = 1, pageSize = 10, provider, durationType, isSystem, amount, description, name, isActive, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
@@ -269,7 +274,11 @@ userSchema.statics.getAllUsersByAdmin = async function(params = {}){
     if (provider) {
       queryParam.provider = provider;
     }
-    
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
     if (typeof isSystem !== 'undefined') {
       queryParam.isSystem = isSystem;
     }

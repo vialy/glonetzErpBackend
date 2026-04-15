@@ -174,12 +174,17 @@ classSchema.statics.deleteClass = async function(classId){
 classSchema.statics.getAllClasses = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, description, name,  } = params;
+    const { pageNum:page = 1, pageSize = 10, description, name, startDate, endDate } = params;
 
     const queryParam = {
       deleted: false,
       isActive: true
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
 
     if (description) {
@@ -207,7 +212,7 @@ classSchema.statics.getAllClasses = async function(params = {}){
 classSchema.statics.getAllClassesByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, description, name, isActive } = params;
+    const { pageNum:page = 1, pageSize = 10, description, name, isActive, startDate, endDate } = params;
 
     const queryParam = {
       deleted: false
@@ -215,6 +220,10 @@ classSchema.statics.getAllClassesByAdmin = async function(params = {}){
     
     if (isActive) {
       queryParam.isActive = isActive;
+    }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
     }
 
     if (description) {

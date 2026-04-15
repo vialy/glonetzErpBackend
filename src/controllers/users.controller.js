@@ -112,15 +112,15 @@ const usersController = {
   },
   async login(req, res) {
     try{
-      const { email, password } = req.body;
+      const { email, password, phone } = req.body;
 
      
 
-      if(!email || !password){
+      if(!password || (!email && !phone)){
         return apiResponse.failed(res, req.$t('Invalid params'));
       }
 
-      const newUser = await usersModel.login(email, password);
+      const newUser = await usersModel.login({email, password, phone});
 
       if (newUser && newUser.success) {
         const { userId, _id} = newUser.data;

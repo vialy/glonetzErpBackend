@@ -8,8 +8,8 @@ const router = express.Router();
 
 // User routes
 // router.post('/list', usersController.getAllUsers);
-router.post('/create', usersController.createUser);
-router.put('/update/:id', decodeUserToken, usersController.updateUser);
+// router.post('/create', usersController.createUser);
+router.post('/update', decodeUserToken, usersController.updateUser);
 router.get('/detail', decodeUserToken, usersController.getUserByUserByToken);
 router.post('/login', usersController.login);
 router.post('/change-password', decodeUserToken, usersController.changePassword);

@@ -130,10 +130,14 @@ logSchema.statics.createLog = async function(params = {}){
 logSchema.statics.getAllLogsByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, logId } = params;
+    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, logId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
+    }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
     }
 
 

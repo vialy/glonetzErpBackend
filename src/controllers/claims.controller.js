@@ -47,11 +47,11 @@ const claimsController = {
       const { id } = req.params;
       const { userId } = req.userInfo;
       const claim = await claimsModel.getClaimByClaimId(id);
-      if (claim) {
-        if(claim.userId !== userId){
+      if (claim.success) {
+        if(claim.data.userId !== userId){
           return apiResponse.failed(res, req.$t('Claim not found'), 404);
         }
-        return apiResponse.success(res, claim);
+        return apiResponse.success(res, claim.data);
       }
       return apiResponse.failed(res, req.$t('Claim not found'));
     }catch(error){

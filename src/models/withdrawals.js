@@ -234,7 +234,7 @@ cashoutSchema.statics.markAsSuccessful = async function(params = {}){
 cashoutSchema.statics.getAllTransactions = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, cashoutId, status, userId, amount, description, classId } = params;
+    const { pageNum:page = 1, pageSize = 10, cashoutId, status, userId, amount, description, classId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -244,6 +244,11 @@ cashoutSchema.statics.getAllTransactions = async function(params = {}){
     if (cashoutId) {
       queryParam.cashoutId = cashoutId;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (classId) {
       queryParam.classId = classId;

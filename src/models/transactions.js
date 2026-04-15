@@ -269,7 +269,7 @@ transactionSchema.statics.markAsSuccessful = async function(params = {}){
 transactionSchema.statics.getAllTransactions = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, transactionId, status, userId, amount, description, classId } = params;
+    const { pageNum:page = 1, pageSize = 10, transactionId, status, userId, amount, description, classId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false,
@@ -279,6 +279,11 @@ transactionSchema.statics.getAllTransactions = async function(params = {}){
     if (transactionId) {
       queryParam.transactionId = transactionId;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (classId) {
       queryParam.classId = classId;
@@ -308,7 +313,7 @@ transactionSchema.statics.getAllTransactions = async function(params = {}){
 transactionSchema.statics.getAllTransactionsByAdmin = async function(params = {}){
   try{
 
-    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, transactionId, classId } = params;
+    const { pageNum:page = 1, pageSize = 10, userId, amount, description, status, transactionId, classId, startDate, endDate } = params;
 
     const queryParam = {
       isDeleted: false
@@ -317,6 +322,11 @@ transactionSchema.statics.getAllTransactionsByAdmin = async function(params = {}
     if (userId) {
       queryParam.userId = userId;
     }
+
+    if (startDate && endDate) {
+      queryParam.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
 
     if (classId) {
       queryParam.classId = classId;
