@@ -8,6 +8,7 @@ import paymentsController from '../controllers/payments.controller.js'
 
 const router = express.Router();
 
+
 /**
  * Users
  */
