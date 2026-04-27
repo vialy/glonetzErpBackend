@@ -36,7 +36,19 @@ const paymentSchema = new Schema({
   },
   duration: {
     type: Number,
-    required: true
+    default: 30 /* default validity duration for payments in days */
+  },
+  startDate: {
+    type: Date,
+    required: true,
+  },
+  endDate: {
+    type: Date,
+    required: true,
+  },
+  className: {
+    type: String,
+    default: ""
   },
   amount: {
     type: Number,
@@ -122,6 +134,7 @@ paymentSchema.statics.getPaymentByPaymentId = async function(paymentId = null){
 }
 
 paymentSchema.statics.createPayment = async function(params = {}){
+  console.log("Params data here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", params)
   delete params.status
   delete params.partnerTransactionId
   try{

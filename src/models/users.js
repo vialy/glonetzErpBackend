@@ -63,6 +63,10 @@ const userSchema = new Schema({
     type: Boolean,
     default: false
   },
+  paymentExpirationDate: {
+    type: Date,
+    default: null
+  },
   isEmailVerified: {
     type: Boolean,
     default: false

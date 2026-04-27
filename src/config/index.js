@@ -9,9 +9,8 @@ export default{
     getAuthRequestPath: '/sapi/auth/challenge/consume'
   }),
   tranzak: (() => {
-    const baseUrl = process.env.TRANZAK_BASE_URL || "http://dsapi.tranzak.me";
+    const baseUrl = process.env.TRANZAK_BASE_URL || "https://dsapi.tranzak.me";
     return Object.freeze({
-      token: '',
       appId: process.env.TRANZAK_APP_ID,
       appKey: process.env.TRANZAK_APP_KEY,
       BASE_URL: baseUrl,

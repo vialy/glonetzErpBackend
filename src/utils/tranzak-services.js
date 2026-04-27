@@ -2,22 +2,27 @@ import config from "../config/index.js";
 import request from "./request.js";
 
 let tranzakTokenTracker = null;
-
+let token = null;
 
 
 
 export const createRequest = async (data = {}) => {
+  console.log("Creating request with data::::::::::::::", data);
   try {
     const response = await request.post(`${config.tranzak.BASE_URL}${config.tranzak.CREATE_REQUEST}`, data, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${await this.getValidToken()}`
+        'Authorization': `Bearer ${await getValidToken()}`
       }
     });
-    if(response.data) return response.data;
+    console.log("Create request response from Tranzak:::::::::::::::", response);
+    if(response.success) return {
+      success: true,
+      data: response.data
+    }
     return {
       success: false,
-      message: "Failed to create request"
+      message: response?.errorMsg || "Failed to create request"
     };
   } catch (error) {
     console.error('Error creating request:', error);
@@ -32,13 +37,17 @@ export const getRequest = async (requestId) => {
     const response = await request.get(`${config.tranzak.BASE_URL}${config.tranzak.GET_REQUEST}${requestId}`, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${await this.getValidToken()}`
+        'Authorization': `Bearer ${await getValidToken()}`
       }
     });
-    if(response.data) return response.data;
+    console.log("Get request response from Tranzak:::::::::::::::", response);
+    if(response?.success) return {
+      success: true,
+      data: response.data
+    }
     return {
       success: false,
-      message: "Failed to fetch request"
+      message: response?.errorMsg || "Failed to fetch request"
     };
   } catch (error) {
     console.error('Error fetching request:', error);
@@ -59,9 +68,13 @@ export const getToken = async () => {
         'Content-Type': 'application/json',
       }
     });
-    const { token, expiresIn } = response.data;
-    tranzakTokenTracker = Date.now() + (expiresIn * 1000) - (5 * 60 * 1000); // refresh 5 minutes before expiry
-    return token;
+    console.log("Token response from Tranzak:::::::::::::::", response);
+    if(response && response.success){
+      const { token, expiresIn } = response.data;
+      tranzakTokenTracker = Date.now() + (expiresIn * 1000) - (5 * 60 * 1000); // refresh 5 minutes before expiry
+      return token;
+    }
+    throw new Error(response?.errorMsg || "Failed to generate token");
   } catch (error) {
     console.error('Error fetching token:', error);
     throw error;
@@ -69,8 +82,8 @@ export const getToken = async () => {
 }
 
 export const getValidToken = async () => {
-  if (!config.tranzak.token || !tranzakTokenTracker || Date.now() >= tranzakTokenTracker) {
-    config.tranzak.token = await getToken();
+  if (!token || !tranzakTokenTracker || Date.now() >= tranzakTokenTracker) {
+    token = await getToken();
   }
-  return config.tranzak.token;
+  return token;
 }
