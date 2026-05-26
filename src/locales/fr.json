@@ -1,0 +1,66 @@
+{
+  "generic_error": "Une erreur est survenue.",
+  "validation_error": "Données invalides.",
+  "unauthorized": "Vous n'êtes pas autorisé.",
+  "forbidden": "Vous n'avez pas la permission d'effectuer cette action.",
+  "not_found": "Ressource introuvable.",
+  "conflict": "Conflit de ressource.",
+  "rate_limited": "Trop de requêtes. Veuillez réessayer plus tard.",
+
+  "invalid_credentials": "Adresse e-mail/téléphone ou mot de passe invalide.",
+  "password_change_required": "Vous devez changer votre mot de passe avant de continuer.",
+  "invalid_token": "Jeton d'authentification invalide.",
+  "expired_token": "Votre session a expiré. Veuillez vous reconnecter.",
+  "missing_token": "Le jeton d'authentification est requis.",
+
+  "user_created": "Utilisateur créé. Ses identifiants lui ont été envoyés.",
+  "user_not_found": "Utilisateur introuvable.",
+  "user_email_or_phone_required": "L'e-mail ou le numéro de téléphone doit être fourni.",
+  "user_already_exists": "Un utilisateur avec cet e-mail ou téléphone existe déjà.",
+  "user_assigned_to_class": "L'utilisateur a été affecté à la classe.",
+  "users_batch_assigned": "Les utilisateurs ont été affectés à la classe.",
+
+  "staff_created": "Membre du personnel créé. Ses identifiants lui ont été envoyés.",
+  "staff_not_found": "Membre du personnel introuvable.",
+  "staff_already_exists": "Un membre du personnel avec cet e-mail existe déjà.",
+  "only_admin_can_manage_staff": "Seuls les administrateurs peuvent gérer les comptes du personnel.",
+  "cannot_modify_self": "Vous ne pouvez pas effectuer cette action sur votre propre compte.",
+
+  "class_created": "Classe créée.",
+  "class_not_found": "Classe introuvable.",
+  "class_updated": "Classe mise à jour.",
+
+  "payment_initiated": "Le paiement a été initié.",
+  "payment_not_found": "Paiement introuvable.",
+  "payment_already_settled": "Ce paiement a déjà été réglé.",
+  "manual_payment_recorded": "Paiement manuel enregistré.",
+  "payments_currently_unavailable": "Les paiements sont indisponibles. Veuillez réessayer plus tard.",
+
+  "claim_submitted": "Votre réclamation a été soumise pour examen.",
+  "claim_not_found": "Réclamation introuvable.",
+  "claim_resolved": "La réclamation a été résolue.",
+  "claim_already_resolved": "Cette réclamation a déjà été résolue.",
+  "claim_proof_required": "Une preuve de paiement est requise.",
+
+  "account_not_found": "Compte introuvable.",
+  "insufficient_funds": "Solde insuffisant.",
+  "transfer_completed": "Transfert effectué.",
+  "only_admin_can_transfer_from_main": "Seuls les administrateurs peuvent transférer depuis le compte principal.",
+  "admin_cannot_withdraw": "Les administrateurs ne peuvent pas retirer de fonds vers un compte mobile money.",
+
+  "withdrawal_account_added": "Compte de retrait ajouté. Vérifiez avec l'OTP que nous vous avons envoyé.",
+  "withdrawal_account_verified": "Compte de retrait vérifié.",
+  "withdrawal_account_not_found": "Compte de retrait introuvable.",
+  "withdrawal_account_not_verified": "Ce compte de retrait n'est pas vérifié.",
+  "withdrawal_initiated": "Le retrait a été initié.",
+  "withdrawal_failed": "Le retrait a échoué.",
+
+  "otp_invalid": "L'OTP saisi est invalide.",
+  "otp_expired": "L'OTP a expiré. Veuillez en demander un nouveau.",
+
+  "gateway_unavailable": "Aucune passerelle de paiement active n'est configurée.",
+  "gateway_error": "La passerelle de paiement a retourné une erreur.",
+
+  "settings_updated": "Paramètres mis à jour.",
+  "password_changed": "Mot de passe modifié avec succès."
+}

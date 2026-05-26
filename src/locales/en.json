@@ -1,0 +1,66 @@
+{
+  "generic_error": "Something went wrong.",
+  "validation_error": "Invalid input.",
+  "unauthorized": "You are not authorized.",
+  "forbidden": "You do not have permission to perform this action.",
+  "not_found": "Resource not found.",
+  "conflict": "Resource conflict.",
+  "rate_limited": "Too many requests. Please try again later.",
+
+  "invalid_credentials": "Invalid email/phone or password.",
+  "password_change_required": "You must change your password before continuing.",
+  "invalid_token": "Invalid authentication token.",
+  "expired_token": "Your session has expired. Please sign in again.",
+  "missing_token": "Authentication token is required.",
+
+  "user_created": "User created. Credentials have been sent to them.",
+  "user_not_found": "User not found.",
+  "user_email_or_phone_required": "Either email or phone number must be provided.",
+  "user_already_exists": "A user with this email or phone already exists.",
+  "user_assigned_to_class": "User has been assigned to the class.",
+  "users_batch_assigned": "Users have been assigned to the class.",
+
+  "staff_created": "Staff member created. Credentials have been sent to them.",
+  "staff_not_found": "Staff member not found.",
+  "staff_already_exists": "A staff member with this email already exists.",
+  "only_admin_can_manage_staff": "Only administrators can manage staff accounts.",
+  "cannot_modify_self": "You cannot perform this action on your own account.",
+
+  "class_created": "Class created.",
+  "class_not_found": "Class not found.",
+  "class_updated": "Class updated.",
+
+  "payment_initiated": "Payment has been initiated.",
+  "payment_not_found": "Payment not found.",
+  "payment_already_settled": "This payment has already been settled.",
+  "manual_payment_recorded": "Manual payment recorded.",
+  "payments_currently_unavailable": "Payments are currently unavailable. Please try again later.",
+
+  "claim_submitted": "Your claim has been submitted for review.",
+  "claim_not_found": "Claim not found.",
+  "claim_resolved": "Claim has been resolved.",
+  "claim_already_resolved": "This claim has already been resolved.",
+  "claim_proof_required": "Proof of payment is required.",
+
+  "account_not_found": "Account not found.",
+  "insufficient_funds": "Insufficient funds.",
+  "transfer_completed": "Transfer completed.",
+  "only_admin_can_transfer_from_main": "Only administrators can transfer from the main account.",
+  "admin_cannot_withdraw": "Administrators cannot withdraw funds to a mobile money account.",
+
+  "withdrawal_account_added": "Withdrawal account added. Verify with the OTP we sent.",
+  "withdrawal_account_verified": "Withdrawal account verified.",
+  "withdrawal_account_not_found": "Withdrawal account not found.",
+  "withdrawal_account_not_verified": "This withdrawal account is not verified.",
+  "withdrawal_initiated": "Withdrawal has been initiated.",
+  "withdrawal_failed": "Withdrawal failed.",
+
+  "otp_invalid": "The OTP you entered is invalid.",
+  "otp_expired": "The OTP has expired. Please request a new one.",
+
+  "gateway_unavailable": "No active payment gateway is configured.",
+  "gateway_error": "The payment gateway returned an error.",
+
+  "settings_updated": "Settings updated.",
+  "password_changed": "Password changed successfully."
+}

@@ -1,0 +1,819 @@
+{
+  "info": {
+    "name": "Glonez Backend",
+    "description": "Glonez language training centre — Staff + User endpoints, Tranzak/Neero gateways, claims, accounts, withdrawals.\n\nUsage:\n1. Import the matching environment (Development, Staging, or Production).\n2. Run \"Staff › Auth › Login\" or \"User › Auth › Login\" — the test script automatically saves `staffToken` / `userToken` to your environment.\n3. All staff/user requests pick up the token via {{staffToken}} / {{userToken}}.\n\nDev mode (NODE_ENV != production):\nThe backend routes payment & withdrawal calls to an in-process simulator, so use `+237670000001` (the value of {{devTestPhone}}) as the phone. Send header `x-simulate-outcome: failed` to force a failed outcome (default = success).\n\nPagination: All list endpoints accept `pageNum` (default 1) and `pageSize` (default 10).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "8a3f0a92-glonez-1b3c-4a5d-9e2f-collection01"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-language", "value": "{{language}}" }],
+            "url": { "raw": "{{baseUrl}}/api/public/health", "host": ["{{baseUrl}}"], "path": ["api", "public", "health"] }
+          }
+        },
+        {
+          "name": "Tranzak callback (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/tranzak", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "tranzak"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"PAY-XXXXXXX\",\n  \"mchTransactionRef\": \"PAY-XXXXXXX\",\n  \"status\": \"SUCCESS\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Neero callback (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"PAY-XXXXXXX\",\n  \"externalReference\": \"PAY-XXXXXXX\",\n  \"status\": \"SUCCESSFUL\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.success && res.data && res.data.token) {",
+                  "  pm.environment.set('staffToken', res.data.token);",
+                  "  pm.environment.set('staffRequiresPasswordChange', res.data.requiresPasswordChange);",
+                  "  if (res.data.staff && res.data.staff.staffId) pm.environment.set('staffFriendlyId', res.data.staff.staffId);",
+                  "  pm.test('staffToken saved', () => pm.expect(pm.environment.get('staffToken')).to.match(/^STF\\./));",
+                  "} else {",
+                  "  pm.test('login failed', () => pm.expect(res.success).to.equal(true));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "staff", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "staff", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "staff", "auth", "change-password"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"NewPassw0rd!\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Users",
+      "item": [
+        {
+          "name": "Create user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.user) pm.environment.set('userFriendlyId', r.data.user.userId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/users", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"phone\": \"{{devTestPhone}}\",\n  \"classId\": \"{{classFriendlyId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/users?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "users"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "q", "value": "", "disabled": true },
+                { "key": "classId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get user",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/{{userFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "{{userFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Update user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/{{userFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "{{userFriendlyId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Renamed User\"\n}" }
+          }
+        },
+        {
+          "name": "Batch assign class",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/batch-assign-class", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "batch-assign-class"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\"{{userFriendlyId}}\"],\n  \"classId\": \"{{classFriendlyId}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Classes",
+      "item": [
+        {
+          "name": "Create class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.class) pm.environment.set('classFriendlyId', r.data.class.classId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/classes", "host": ["{{baseUrl}}"], "path": ["api", "staff", "classes"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"French A1 — Spring\",\n  \"description\": \"Beginner French\",\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-08-30\",\n  \"fee\": 50000,\n  \"currencyCode\": \"XAF\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List classes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/classes?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "classes"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "q", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get class",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/classes/{{classFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "classes", "{{classFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Update class",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/classes/{{classFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "classes", "{{classFriendlyId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"fee\": 60000\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Payments",
+      "item": [
+        {
+          "name": "List payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/payments?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "payments"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "status", "value": "", "disabled": true },
+                { "key": "method", "value": "", "disabled": true },
+                { "key": "userId", "value": "", "disabled": true },
+                { "key": "classId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get payment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/payments/{{paymentFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "payments", "{{paymentFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Record manual payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/payments/manual", "host": ["{{baseUrl}}"], "path": ["api", "staff", "payments", "manual"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userFriendlyId}}\",\n  \"classId\": \"{{classFriendlyId}}\",\n  \"amount\": 50000,\n  \"note\": \"Cash payment received\",\n  \"status\": \"successful\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Claims",
+      "item": [
+        {
+          "name": "List claims",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/claims?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "claims"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "status", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get claim",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/claims/{{claimFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "claims", "{{claimFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Resolve claim",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/claims/{{claimFriendlyId}}/resolve", "host": ["{{baseUrl}}"], "path": ["api", "staff", "claims", "{{claimFriendlyId}}", "resolve"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"successful\",\n  \"paymentId\": \"{{paymentFriendlyId}}\",\n  \"resolutionNote\": \"Verified on gateway dashboard\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Accounts",
+      "item": [
+        {
+          "name": "My account",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/me", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "me"] }
+          }
+        },
+        {
+          "name": "Statement",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/accounts/statement?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "accounts", "statement"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "from", "value": "", "disabled": true },
+                { "key": "to", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List all accounts (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/accounts?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "accounts"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transfer to staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/transfer", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "transfer"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiaryStaffId\": \"{{beneficiaryStaffId}}\",\n  \"amount\": 10000,\n  \"fee\": 0,\n  \"description\": \"Monthly allocation\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Withdrawals",
+      "item": [
+        {
+          "name": "List withdrawal accounts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/withdrawal-accounts?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "withdrawal-accounts"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add withdrawal account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.withdrawalAccount) pm.environment.set('withdrawalAccountId', r.data.withdrawalAccount.withdrawalAccountId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawal-accounts", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawal-accounts"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"mtn\",\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"holderName\": \"Owner Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify withdrawal account (OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawal-accounts/{{withdrawalAccountId}}/verify", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawal-accounts", "{{withdrawalAccountId}}", "verify"] },
+            "body": { "mode": "raw", "raw": "{\n  \"otp\": \"123456\"\n}" }
+          }
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawal-accounts/{{withdrawalAccountId}}/resend-otp", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawal-accounts", "{{withdrawalAccountId}}", "resend-otp"] }
+          }
+        },
+        {
+          "name": "Initiate withdrawal (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-simulate-outcome", "value": "success", "description": "Used by the in-process simulator outside production." }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawals", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawals"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000\n}"
+            }
+          }
+        },
+        {
+          "name": "Initiate withdrawal (failed — simulator)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-simulate-outcome", "value": "failed" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawals", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawals"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Staff management (admin)",
+      "item": [
+        {
+          "name": "Create staff",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.staff) pm.environment.set('beneficiaryStaffId', r.data.staff.staffId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Manager\",\n  \"email\": \"jane@example.com\",\n  \"role\": 600\n}"
+            }
+          }
+        },
+        {
+          "name": "List staff",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/staff?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "staff"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "q", "value": "", "disabled": true },
+                { "key": "role", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get staff",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}"] }
+          }
+        },
+        {
+          "name": "Update staff",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": true\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Settings (admin)",
+      "item": [
+        {
+          "name": "Get settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/settings", "host": ["{{baseUrl}}"], "path": ["api", "staff", "settings"] }
+          }
+        },
+        {
+          "name": "Update settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/settings", "host": ["{{baseUrl}}"], "path": ["api", "staff", "settings"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activeGateway\": \"tranzak\",\n  \"notificationEmails\": [\"ops@glonez.local\"]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User › Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.success && res.data && res.data.token) {",
+                  "  pm.environment.set('userToken', res.data.token);",
+                  "  pm.environment.set('userRequiresPasswordChange', res.data.requiresPasswordChange);",
+                  "  if (res.data.user && res.data.user.userId) pm.environment.set('userFriendlyId', res.data.user.userId);",
+                  "  pm.test('userToken saved', () => pm.expect(pm.environment.get('userToken')).to.match(/^USR\\./));",
+                  "} else {",
+                  "  pm.test('login failed', () => pm.expect(res.success).to.equal(true));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-language", "value": "{{language}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "users", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailOrPhone\": \"testuser@example.com\",\n  \"password\": \"REPLACE_WITH_TEMP_PASSWORD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Change password (forced on first login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "users", "auth", "change-password"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"REPLACE_WITH_TEMP_PASSWORD\",\n  \"newPassword\": \"NewSecret123!\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User › Profile & Payments",
+      "item": [
+        {
+          "name": "Me (profile + class)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api", "users", "me"] }
+          }
+        },
+        {
+          "name": "My class",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/my-class", "host": ["{{baseUrl}}"], "path": ["api", "users", "my-class"] }
+          }
+        },
+        {
+          "name": "List payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/payments?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "payments"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "status", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pending payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/payments/pending?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "payments", "pending"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Initiate payment (success — dev test phone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.payment) pm.environment.set('paymentFriendlyId', r.data.payment.paymentId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-simulate-outcome", "value": "success" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/initiate", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "initiate"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"provider\": \"mtn\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Initiate payment (failed — dev test phone)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-simulate-outcome", "value": "failed" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/initiate", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "initiate"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"provider\": \"mtn\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User › Claims",
+      "item": [
+        {
+          "name": "List claims",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/claims?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "claims"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create claim (upload proof)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/claims", "host": ["{{baseUrl}}"], "path": ["api", "users", "claims"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "proof", "type": "file", "src": [] },
+                { "key": "amount", "value": "50000", "type": "text" },
+                { "key": "currencyCode", "value": "XAF", "type": "text" },
+                { "key": "description", "value": "Paid via mobile money", "type": "text" },
+                { "key": "paymentDate", "value": "2026-05-15", "type": "text" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
