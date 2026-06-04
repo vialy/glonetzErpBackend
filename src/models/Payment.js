@@ -46,8 +46,11 @@ const paymentSchema = new Schema(
     },
 
     // Gateway artefacts
-    gatewayReference: { type: String, index: true },
-    gatewayPayload: { type: Schema.Types.Mixed },     // raw initiate response
+    gatewayReference: { type: String, index: true },  // neero transactionIntentId
+    gatewayPaymentRef: { type: String },              // user-visible reference from neero
+    gatewayType: { type: String },                    // "CASHIN" | "CASHOUT" (sanity check)
+    gatewayFees: { type: Schema.Types.Mixed },        // neero `fees` object — used for reconciliation
+    gatewayPayload: { type: Schema.Types.Mixed },     // raw initiate / verify response
     gatewayCallback: { type: Schema.Types.Mixed },    // most recent webhook payload
     paymentUrl: { type: String },                     // user-redirectable url, if any
 

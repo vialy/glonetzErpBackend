@@ -158,6 +158,9 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
     });
     withdrawal.provider = adapter.name;
     withdrawal.gatewayReference = result.reference;
+    withdrawal.gatewayType = result.type;
+    withdrawal.gatewayPaymentRef = result.paymentRef;
+    withdrawal.gatewayFees = result.fees;
     withdrawal.gatewayPayload = result.raw;
 
     // If the (simulated) adapter resolved synchronously to success, settle now.

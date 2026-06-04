@@ -76,6 +76,34 @@ function errorPayload(err) {
 }
 
 /**
+ * Normalize a Neero transaction-intent object (response body of POST cash-in /
+ * cash-out and GET /transaction-intents/:id).
+ *
+ * The shape we receive is flat (no `data` envelope):
+ *   { id, status, type: "CASHIN" | "CASHOUT", externalTransactionId,
+ *     paymentRef, paymentToken, amount, currency, fees, statusUpdates, ... }
+ *
+ * Returns a stable subset; the full body is always exposed as `raw`.
+ */
+function extractIntent(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  return {
+    id: obj.id || obj.transactionIntentId || null,
+    status: normalizeStatus(obj.status || obj.newStatus),
+    rawStatus: obj.status || obj.newStatus || null,
+    type: obj.type || null, // "CASHIN" | "CASHOUT"
+    externalTransactionId: obj.externalTransactionId || null,
+    paymentRef: obj.paymentRef || null,
+    paymentToken: obj.paymentToken || null,
+    amount: typeof obj.amount === 'number' ? obj.amount : null,
+    currencyCode: obj.currency || obj.currencyCode || null,
+    fees: obj.fees || null,
+    statusUpdates: Array.isArray(obj.statusUpdates) ? obj.statusUpdates : null,
+    error: obj.error || null,
+  };
+}
+
+/**
  * Resolve the Neero payment method ID for a given phone + provider.
  *
  * Checks the local NeeroPaymentMethod cache first. If not found, creates
@@ -161,10 +189,16 @@ export async function initiatePayment({
       confirm: true,
     });
     const data = unwrap(res);
+    const intent = extractIntent(data) || {};
     return {
       ok: true,
-      reference: data.id || data.transactionIntentId || mchTransactionRef,
-      status: normalizeStatus(data.status || data.newStatus),
+      reference: intent.id || mchTransactionRef,
+      status: intent.status,
+      type: intent.type,             // expect "CASHIN"
+      paymentRef: intent.paymentRef,
+      amount: intent.amount,
+      currencyCode: intent.currencyCode,
+      fees: intent.fees,
       raw: data,
       // MoMo collections are confirmed on the customer's phone — no redirect URL.
       paymentUrl: null,
@@ -209,10 +243,16 @@ export async function initiateWithdrawal({
       confirm: true,
     });
     const data = unwrap(res);
+    const intent = extractIntent(data) || {};
     return {
       ok: true,
-      reference: data.id || data.transactionIntentId || mchTransactionRef,
-      status: normalizeStatus(data.status || data.newStatus),
+      reference: intent.id || mchTransactionRef,
+      status: intent.status,
+      type: intent.type,             // expect "CASHOUT"
+      paymentRef: intent.paymentRef,
+      amount: intent.amount,
+      currencyCode: intent.currencyCode,
+      fees: intent.fees,
       raw: data,
     };
   } catch (err) {
@@ -222,12 +262,34 @@ export async function initiateWithdrawal({
 
 /**
  * Verify a transaction intent by its Neero ID.
+ *
+ * Reads the flat response body returned by GET /transaction-intents/:id:
+ *   top-level: id, status, type ("CASHIN" | "CASHOUT"), externalTransactionId,
+ *              paymentRef, amount, currency, fees, statusUpdates, error.
+ *
+ * Returns the normalized intent plus the raw payload, so callers can both
+ * (a) authoritatively settle/fail the record and (b) capture metadata
+ * (paymentRef, fees, etc.) without re-parsing.
  */
 export async function verify({ reference }) {
   try {
     const res = await client().get(`/api/v1/transaction-intents/${reference}`);
     const data = unwrap(res);
-    return { ok: true, status: normalizeStatus(data.status || data.newStatus), raw: data };
+    const intent = extractIntent(data) || {};
+    return {
+      ok: true,
+      status: intent.status,
+      type: intent.type,
+      reference: intent.id || reference,
+      externalTransactionId: intent.externalTransactionId,
+      paymentRef: intent.paymentRef,
+      amount: intent.amount,
+      currencyCode: intent.currencyCode,
+      fees: intent.fees,
+      statusUpdates: intent.statusUpdates,
+      error: intent.error,
+      raw: data,
+    };
   } catch (err) {
     return { ok: false, error: errorPayload(err) };
   }

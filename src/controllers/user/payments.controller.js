@@ -87,6 +87,9 @@ const initiate = asyncHandler(async (req, res) => {
     });
     payment.provider = adapter.name;
     payment.gatewayReference = result.reference;
+    payment.gatewayType = result.type;
+    payment.gatewayPaymentRef = result.paymentRef;
+    payment.gatewayFees = result.fees;
     payment.gatewayPayload = result.raw;
     payment.paymentUrl = result.paymentUrl || undefined;
 

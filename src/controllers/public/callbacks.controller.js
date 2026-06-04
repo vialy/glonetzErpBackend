@@ -69,6 +69,11 @@ function buildHandler(providerName) {
 /**
  * Re-verify the payment status directly with Neero using the stored
  * gatewayReference, then apply the authoritative status.
+ *
+ * Cross-checks performed against the verify response:
+ *   - type must be "CASHIN" (this is a payment, not a withdrawal)
+ *   - reported amount must match what we have on record
+ * Either failing → ignore the callback (likely spoof or mis-routed).
  */
 async function handlePaymentCallback({ res, adapter, payment, raw }) {
   if (payment.status !== PAYMENT_STATUSES.PENDING) {
@@ -86,7 +91,24 @@ async function handlePaymentCallback({ res, adapter, payment, raw }) {
     return ok(res, { acknowledged: true, verified: false });
   }
 
+  // Sanity: this intent must be a CASHIN and the amount must match
+  if (verified.type && verified.type !== 'CASHIN') {
+    payment.gatewayCallback = raw;
+    await payment.save();
+    return ok(res, { acknowledged: true, mismatch: 'type' });
+  }
+  if (verified.amount != null && Number(verified.amount) !== Number(payment.amount)) {
+    payment.gatewayCallback = raw;
+    await payment.save();
+    return ok(res, { acknowledged: true, mismatch: 'amount' });
+  }
+
   const status = verified.status;
+
+  // Capture freshest gateway metadata from the verify response
+  if (verified.paymentRef) payment.gatewayPaymentRef = verified.paymentRef;
+  if (verified.fees) payment.gatewayFees = verified.fees;
+  payment.gatewayPayload = verified.raw;
 
   if (status === 'successful') {
     payment.status = PAYMENT_STATUSES.SUCCESSFUL;
@@ -128,6 +150,10 @@ async function handlePaymentCallback({ res, adapter, payment, raw }) {
 /**
  * Re-verify the withdrawal status directly with Neero, then apply it.
  * On failure: refund the staff account and notify.
+ *
+ * Cross-checks the verify response:
+ *   - type must be "CASHOUT"
+ *   - reported amount must match what we have on record
  */
 async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
   if (withdrawal.status !== WITHDRAWAL_STATUSES.PENDING) {
@@ -144,7 +170,22 @@ async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
     return ok(res, { acknowledged: true, verified: false });
   }
 
+  if (verified.type && verified.type !== 'CASHOUT') {
+    withdrawal.gatewayCallback = raw;
+    await withdrawal.save();
+    return ok(res, { acknowledged: true, mismatch: 'type' });
+  }
+  if (verified.amount != null && Number(verified.amount) !== Number(withdrawal.amount)) {
+    withdrawal.gatewayCallback = raw;
+    await withdrawal.save();
+    return ok(res, { acknowledged: true, mismatch: 'amount' });
+  }
+
   const status = verified.status;
+
+  if (verified.paymentRef) withdrawal.gatewayPaymentRef = verified.paymentRef;
+  if (verified.fees) withdrawal.gatewayFees = verified.fees;
+  withdrawal.gatewayPayload = verified.raw;
 
   if (status === 'successful') {
     withdrawal.status = WITHDRAWAL_STATUSES.SUCCESSFUL;

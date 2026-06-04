@@ -24,7 +24,10 @@ const withdrawalSchema = new Schema(
       default: WITHDRAWAL_STATUSES.PENDING,
       index: true,
     },
-    gatewayReference: { type: String, index: true },
+    gatewayReference: { type: String, index: true },  // neero transactionIntentId
+    gatewayPaymentRef: { type: String },              // user-visible reference from neero
+    gatewayType: { type: String },                    // "CASHIN" | "CASHOUT" (sanity check)
+    gatewayFees: { type: Schema.Types.Mixed },        // neero `fees` object
     gatewayPayload: { type: Schema.Types.Mixed },
     gatewayCallback: { type: Schema.Types.Mixed },
     failureReason: { type: String },
