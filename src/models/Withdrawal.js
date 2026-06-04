@@ -16,7 +16,7 @@ const withdrawalSchema = new Schema(
 
     amount: { type: Number, required: true, min: 0 },
     currencyCode: { type: String, default: 'XAF', uppercase: true },
-    provider: { type: String, required: true }, // gateway provider used (tranzak | neero)
+    provider: { type: String, required: true }, // gateway provider used (e.g. neero)
 
     status: {
       type: String,

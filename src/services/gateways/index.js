@@ -1,12 +1,10 @@
 import { Setting } from '../../models/index.js';
 import config, { PAYMENT_PROVIDERS, NOTIFICATION_EVENTS } from '../../config/index.js';
-import tranzak from './tranzak.js';
 import neero from './neero.js';
 import simulator from './simulator.js';
 import notifier from '../notification.service.js';
 
 const REAL_ADAPTERS = {
-  [PAYMENT_PROVIDERS.TRANZAK]: tranzak,
   [PAYMENT_PROVIDERS.NEERO]: neero,
 };
 
@@ -16,10 +14,10 @@ const REAL_ADAPTERS = {
  * Rules:
  *   - If `Setting.activeGateway === 'none'` → null (callers raise `gateway_unavailable`).
  *   - Otherwise:
- *       * In production       → the real adapter (Tranzak or Neero).
+ *       * In production       → the real adapter (Neero).
  *       * Outside production  → the simulator. We expose the *configured*
  *         gateway name on the simulator so the persisted records still say
- *         "tranzak" / "neero" — handy for end-to-end test snapshots — without
+ *         "neero" — handy for end-to-end test snapshots — without
  *         the simulator code path branching elsewhere.
  *
  * The single returned object always has:

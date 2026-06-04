@@ -60,7 +60,6 @@ export const PAYMENT_METHODS = Object.freeze({
 });
 
 export const PAYMENT_PROVIDERS = Object.freeze({
-  TRANZAK: 'tranzak',
   NEERO: 'neero',
   MANUAL: 'manual',
   NONE: 'none',
@@ -200,14 +199,8 @@ const config = {
 
   gateways: {
     activeDefault: env('ACTIVE_GATEWAY', PAYMENT_PROVIDERS.NONE),
-    tranzak: {
-      baseUrl: env('TRANZAK_BASE_URL', 'https://sandbox.tranzak.me'),
-      appId: env('TRANZAK_APP_ID'),
-      apiKey: env('TRANZAK_API_KEY'),
-      webhookSecret: env('TRANZAK_WEBHOOK_SECRET'),
-    },
     neero: {
-      baseUrl: env('NEERO_BASE_URL', 'https://api.neero.io'),
+      baseUrl: env('NEERO_BASE_URL', 'https://api.neero.tech/payment-gateway'),
       secretKey: env('NEERO_SECRET_KEY'),
       merchantPmId: env('NEERO_MERCHANT_PM_ID'),
       webhookSecret: env('NEERO_WEBHOOK_SECRET'),

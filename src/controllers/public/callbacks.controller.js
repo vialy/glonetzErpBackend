@@ -8,16 +8,22 @@ import {
   WITHDRAWAL_STATUSES,
   NOTIFICATION_EVENTS,
   ERROR_CODES,
+  ID_PREFIXES,
 } from '../../config/index.js';
 
 /**
- * Generic callback handler used for both Tranzak and Neero.
+ * Neero callback handler.
  *
- * Steps:
- *   1. Resolve the adapter from the URL.
- *   2. Let the adapter parse + verify the payload.
- *   3. Look up the matching Payment / Withdrawal by friendly id OR gateway ref.
- *   4. Update statuses + credit the company account on a successful payment.
+ * Anti-spoofing flow:
+ *   1. Parse the raw callback to extract `externalTransactionId` (our friendly id,
+ *      e.g. "PAY-XXXXXXXX" or "WDR-XXXXXXXX") and `transactionIntentId` (Neero's
+ *      internal ID we stored as `gatewayReference`).
+ *   2. Skip immediately if the callback reports PENDING — nothing to do yet.
+ *   3. Determine record type from the externalTransactionId prefix.
+ *   4. Load the internal Payment / Withdrawal record using externalTransactionId.
+ *   5. Use the `gatewayReference` stored on the record (not the callback value) to
+ *      query Neero directly — this prevents spoofed payloads from changing status.
+ *   6. Apply the verified status.
  */
 function buildHandler(providerName) {
   return asyncHandler(async (req, res) => {
@@ -28,32 +34,59 @@ function buildHandler(providerName) {
     if (!parsed.ok) {
       return fail(res, 'invalid_callback', ERROR_CODES.FORBIDDEN);
     }
-    const { reference, status, raw } = parsed;
 
-    const payment = await Payment.findOne({
-      $or: [{ paymentId: reference }, { gatewayReference: reference }],
-    });
-    if (payment) {
-      return handlePaymentCallback({ res, payment, status, raw });
+    const { externalTransactionId, status: callbackStatus, raw } = parsed;
+
+    // Ignore PENDING callbacks — nothing actionable
+    if (callbackStatus === 'pending') {
+      return ok(res, { acknowledged: true, skipped: 'pending' });
     }
 
-    const withdrawal = await Withdrawal.findOne({
-      $or: [{ withdrawalId: reference }, { gatewayReference: reference }],
-    });
-    if (withdrawal) {
-      return handleWithdrawalCallback({ res, withdrawal, status, raw });
+    if (!externalTransactionId) {
+      return ok(res, { acknowledged: true, matched: false });
+    }
+
+    // Determine type from the friendly-id prefix
+    const isPayment = externalTransactionId.startsWith(`${ID_PREFIXES.payment}-`);
+    const isWithdrawal = externalTransactionId.startsWith(`${ID_PREFIXES.withdrawal}-`);
+
+    if (isPayment) {
+      const payment = await Payment.findOne({ paymentId: externalTransactionId });
+      if (!payment) return ok(res, { acknowledged: true, matched: false });
+      return handlePaymentCallback({ res, adapter, payment, raw });
+    }
+
+    if (isWithdrawal) {
+      const withdrawal = await Withdrawal.findOne({ withdrawalId: externalTransactionId });
+      if (!withdrawal) return ok(res, { acknowledged: true, matched: false });
+      return handleWithdrawalCallback({ res, adapter, withdrawal, raw });
     }
 
     return ok(res, { acknowledged: true, matched: false });
   });
 }
 
-async function handlePaymentCallback({ res, payment, status, raw }) {
+/**
+ * Re-verify the payment status directly with Neero using the stored
+ * gatewayReference, then apply the authoritative status.
+ */
+async function handlePaymentCallback({ res, adapter, payment, raw }) {
   if (payment.status !== PAYMENT_STATUSES.PENDING) {
     payment.gatewayCallback = raw;
     await payment.save();
     return ok(res, { acknowledged: true, alreadySettled: true });
   }
+
+  // Query Neero for the authoritative status (anti-spoofing)
+  const verified = await adapter.verify({ reference: payment.gatewayReference });
+  if (!verified.ok) {
+    // Gateway unreachable — store the raw callback and bail; do not update status
+    payment.gatewayCallback = raw;
+    await payment.save();
+    return ok(res, { acknowledged: true, verified: false });
+  }
+
+  const status = verified.status;
 
   if (status === 'successful') {
     payment.status = PAYMENT_STATUSES.SUCCESSFUL;
@@ -86,17 +119,32 @@ async function handlePaymentCallback({ res, payment, status, raw }) {
     return ok(res, { acknowledged: true, settled: true });
   }
 
+  // Still pending or unknown — store callback and wait for the next one
   payment.gatewayCallback = raw;
   await payment.save();
   return ok(res, { acknowledged: true });
 }
 
-async function handleWithdrawalCallback({ res, withdrawal, status, raw }) {
+/**
+ * Re-verify the withdrawal status directly with Neero, then apply it.
+ * On failure: refund the staff account and notify.
+ */
+async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
   if (withdrawal.status !== WITHDRAWAL_STATUSES.PENDING) {
     withdrawal.gatewayCallback = raw;
     await withdrawal.save();
     return ok(res, { acknowledged: true, alreadySettled: true });
   }
+
+  // Query Neero for the authoritative status (anti-spoofing)
+  const verified = await adapter.verify({ reference: withdrawal.gatewayReference });
+  if (!verified.ok) {
+    withdrawal.gatewayCallback = raw;
+    await withdrawal.save();
+    return ok(res, { acknowledged: true, verified: false });
+  }
+
+  const status = verified.status;
 
   if (status === 'successful') {
     withdrawal.status = WITHDRAWAL_STATUSES.SUCCESSFUL;
@@ -136,6 +184,5 @@ async function handleWithdrawalCallback({ res, withdrawal, status, raw }) {
 }
 
 export default {
-  tranzakCallback: buildHandler('tranzak'),
   neeroCallback: buildHandler('neero'),
 };

@@ -8,3 +8,4 @@ export { default as Transaction } from './Transaction.js';
 export { default as WithdrawalAccount } from './WithdrawalAccount.js';
 export { default as Withdrawal } from './Withdrawal.js';
 export { default as Setting } from './Setting.js';
+export { default as NeeroPaymentMethod } from './NeeroPaymentMethod.js';

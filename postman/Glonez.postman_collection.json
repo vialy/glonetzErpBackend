@@ -1,13 +1,11 @@
 {
   "info": {
     "name": "Glonez Backend",
-    "description": "Glonez language training centre — Staff + User endpoints, Tranzak/Neero gateways, claims, accounts, withdrawals.\n\nUsage:\n1. Import the matching environment (Development, Staging, or Production).\n2. Run \"Staff › Auth › Login\" or \"User › Auth › Login\" — the test script automatically saves `staffToken` / `userToken` to your environment.\n3. All staff/user requests pick up the token via {{staffToken}} / {{userToken}}.\n\nDev mode (NODE_ENV != production):\nThe backend routes payment & withdrawal calls to an in-process simulator, so use `+237670000001` (the value of {{devTestPhone}}) as the phone. Send header `x-simulate-outcome: failed` to force a failed outcome (default = success).\n\nPagination: All list endpoints accept `pageNum` (default 1) and `pageSize` (default 10).",
+    "description": "Glonez language training centre — Staff + User endpoints, Neero gateway (with anti-spoof callback re-verification), claims, accounts, transfers and withdrawals.\n\nUsage:\n1. Import the matching environment (Development, Staging, or Production).\n2. Run `Staff › Auth › Login` or `User › Auth › Login` — the test script automatically saves `staffToken` / `userToken` to your environment.\n3. All staff/user requests pick up the token via `{{staffToken}}` / `{{userToken}}`.\n\nDev mode (NODE_ENV != production):\nThe backend routes payment & withdrawal calls to an in-process simulator, so use `+237670000001` (the value of `{{devTestPhone}}`) as the phone. Send header `x-simulate-outcome: failed` to force a failed outcome (default = success).\n\nNeero callbacks:\nOne endpoint receives both payment and withdrawal callbacks (`POST /api/public/callbacks/neero`). The server discriminates by the prefix of `externalTransactionId` (`PAY-…` → Payment, `WDR-…` → Withdrawal). PENDING callbacks are acknowledged and ignored. For non-pending callbacks, the server re-queries Neero using the stored `gatewayReference` (the Neero `transactionIntentId`) — the callback body itself never drives the status update, eliminating spoofing.\n\nPagination: list endpoints accept `pageNum` (default 1) and `pageSize` (default 10).\n\nResponse shape: every endpoint returns HTTP 200 with `{ success, data, errorMsg, errorCode }`. Frontends gate on `success` + `errorCode`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "8a3f0a92-glonez-1b3c-4a5d-9e2f-collection01"
   },
-  "auth": {
-    "type": "noauth"
-  },
+  "auth": { "type": "noauth" },
   "variable": [],
   "item": [
     {
@@ -22,26 +20,92 @@
           }
         },
         {
-          "name": "Tranzak callback (simulated)",
+          "name": "Neero callback — payment PENDING (ignored)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/public/callbacks/tranzak", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "tranzak"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "description": "Required only if NEERO_WEBHOOK_SECRET is configured.", "disabled": true }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"requestId\": \"PAY-XXXXXXX\",\n  \"mchTransactionRef\": \"PAY-XXXXXXX\",\n  \"status\": \"SUCCESS\"\n}"
+              "raw": "{\n  \"id\": \"6a20c018b9d7c25f82aef905\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c017b9d7c25f82aef8ec\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"PENDING\",\n      \"externalTransactionId\": \"{{paymentFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
             }
           }
         },
         {
-          "name": "Neero callback (simulated)",
+          "name": "Neero callback — payment SUCCESSFUL",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "disabled": true }
+            ],
             "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"PAY-XXXXXXX\",\n  \"externalReference\": \"PAY-XXXXXXX\",\n  \"status\": \"SUCCESSFUL\"\n}"
+              "raw": "{\n  \"id\": \"6a20c4b4b9d7c25f82af1ecf\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c4a0b9d7c25f82af1dec\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"SUCCESSFUL\",\n      \"externalTransactionId\": \"{{paymentFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Neero callback — payment FAILED",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "disabled": true }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"6a20c02bb9d7c25f82aef97a\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c017b9d7c25f82aef8ec\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"FAILED\",\n      \"externalTransactionId\": \"{{paymentFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Neero callback — withdrawal PENDING (ignored)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "disabled": true }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"6a20c74eb9d7c25f82af3284\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c74cb9d7c25f82af3263\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"PENDING\",\n      \"externalTransactionId\": \"{{withdrawalFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Neero callback — withdrawal SUCCESSFUL",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "disabled": true }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"6a20c763b9d7c25f82af3326\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c74cb9d7c25f82af3263\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"SUCCESSFUL\",\n      \"externalTransactionId\": \"{{withdrawalFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Neero callback — withdrawal FAILED",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-neero-signature", "value": "{{neeroWebhookSecret}}", "disabled": true }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/public/callbacks/neero", "host": ["{{baseUrl}}"], "path": ["api", "public", "callbacks", "neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"6a20c799b9d7c25f82af3401\",\n  \"operatorDetails\": {\n    \"operatorId\": 371,\n    \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n  },\n  \"data\": {\n    \"object\": {\n      \"transactionIntentId\": \"6a20c74cb9d7c25f82af3263\",\n      \"sessionId\": null,\n      \"flowTransactionIntentParentId\": null,\n      \"createFlowTransactionId\": null,\n      \"newStatus\": \"FAILED\",\n      \"externalTransactionId\": \"{{withdrawalFriendlyId}}\",\n      \"apiOperatorDetails\": {\n        \"operatorId\": 371,\n        \"merchantKey\": \"mk_uqsZyhtmpfagySmzlVcc8sTHeedoEDLQv2UWvEZed4YnvGBhUC\"\n      }\n    },\n    \"previousAttributes\": null\n  },\n  \"type\": \"transactionIntent.statusUpdated\"\n}"
             }
           }
         }
@@ -494,6 +558,18 @@
         },
         {
           "name": "Initiate withdrawal (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.withdrawal) pm.environment.set('withdrawalFriendlyId', r.data.withdrawal.withdrawalId);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -608,7 +684,7 @@
           }
         },
         {
-          "name": "Update settings",
+          "name": "Update settings — enable Neero",
           "request": {
             "method": "PATCH",
             "header": [
@@ -618,7 +694,22 @@
             "url": { "raw": "{{baseUrl}}/api/staff/settings", "host": ["{{baseUrl}}"], "path": ["api", "staff", "settings"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"activeGateway\": \"tranzak\",\n  \"notificationEmails\": [\"ops@glonez.local\"]\n}"
+              "raw": "{\n  \"activeGateway\": \"neero\",\n  \"notificationEmails\": [\"ops@glonez.local\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update settings — disable gateway",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/settings", "host": ["{{baseUrl}}"], "path": ["api", "staff", "settings"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activeGateway\": \"none\"\n}"
             }
           }
         }
@@ -773,6 +864,21 @@
               "raw": "{\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"provider\": \"mtn\"\n}"
             }
           }
+        },
+        {
+          "name": "Initiate payment (real — production MoMo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/initiate", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "initiate"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+237670123456\",\n  \"provider\": \"orange\"\n}"
+            }
+          }
         }
       ]
     },
@@ -797,6 +903,18 @@
         },
         {
           "name": "Create claim (upload proof)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.claim) pm.environment.set('claimFriendlyId', r.data.claim.claimId);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],

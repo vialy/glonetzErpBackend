@@ -1,6 +1,6 @@
 # Glonez Backend
 
-Express.js backend for a language training centre. Manages users, classes, payments (Tranzak & Neero), claims, and company fund accounts.
+Express.js backend for a language training centre. Manages users, classes, payments (Neero), claims, and company fund accounts.
 
 ## Highlights
 
@@ -14,7 +14,7 @@ Express.js backend for a language training centre. Manages users, classes, payme
 - **Every controller is wrapped in try/catch via `asyncHandler`** — thrown errors are logged server-side and rendered as `{ success: false, errorMsg, errorCode }`. The client never sees a crash or a stack trace.
 - **Pagination** on every list endpoint via [`mongoose-paginate-v2`](https://github.com/aravindnc/mongoose-paginate-v2). Frontend sends `?pageNum=` (default 1) and `?pageSize=` (default 10, capped at 100).
 - Translation via a tiny in-process middleware exposing `req.$t('key')`, dictionaries in `src/locales/{en,fr}.json`, language read from the `x-language` header.
-- **Three environments — `development | staging | production`.** Real Tranzak/Neero calls are made **only in production**; outside production a built-in simulator is used (see "Dev gateway simulator" below).
+- **Three environments — `development | staging | production`.** Real Neero calls are made **only in production**; outside production a built-in simulator is used (see "Dev gateway simulator" below).
 - Active gateway is configurable at runtime (Setting singleton) and can be `none`.
 - Atomic credit/debit using Mongo sessions/transactions (with graceful fallback for non-replica-set Mongo).
 - Notification emails for `claim_reported`, `payment_received`, `gateway_error`, `withdrawal_failed`.
@@ -29,7 +29,7 @@ x-simulate-outcome: success   # default
 x-simulate-outcome: failed
 ```
 
-With `NODE_ENV=production` the simulator is bypassed entirely and the real Tranzak/Neero adapter (whichever is selected via Settings) is called regardless of the phone number.
+With `NODE_ENV=production` the simulator is bypassed entirely and the real Neero adapter (selected via Settings) is called regardless of the phone number.
 
 ## Pagination
 
@@ -58,10 +58,10 @@ src/
     staff/            auth, users, classes, payments, claims, accounts,
                       withdrawals, staff (management), settings
     user/             auth, profile, payments, claims
-    public/           callbacks (Tranzak + Neero webhooks)
+    public/           callbacks (Neero webhook)
   routes/             index, staff.routes, user.routes, public.routes
   services/
-    gateways/         index (active selector), tranzak, neero
+    gateways/         index (active selector), neero, simulator
     email.service     Nodemailer (SMTP)
     sms.service       Stub provider (logs)
     notification.service  Notifies the configured staff emails
@@ -118,7 +118,6 @@ Set `x-language: en` or `x-language: fr` on any request. Controllers call `req.$
 | Method | Path                          | Description                       |
 | ------ | ----------------------------- | --------------------------------- |
 | GET    | `/api/public/health`          | Health probe                      |
-| POST   | `/api/public/callbacks/tranzak` | Tranzak webhook                 |
 | POST   | `/api/public/callbacks/neero`   | Neero webhook                   |
 
 ### Staff (`/api/staff`)
@@ -154,7 +153,7 @@ Set `x-language: en` or `x-language: fr` on any request. Controllers call `req.$
 | GET    | `/staff` / `/staff/:staffId`                        | Admin         |                                                        |
 | PATCH  | `/staff/:staffId`                                   | Admin         |                                                        |
 | GET    | `/settings`                                         | Admin         | `{ activeGateway, notificationEmails }`                |
-| PATCH  | `/settings`                                         | Admin         | Set `activeGateway` to `tranzak`, `neero`, or `none`   |
+| PATCH  | `/settings`                                         | Admin         | Set `activeGateway` to `neero` or `none`               |
 
 ### User (`/api/users`)
 
@@ -174,20 +173,19 @@ Set `x-language: en` or `x-language: fr` on any request. Controllers call `req.$
 
 ## Payment gateways
 
-The active gateway is stored in the `Setting` singleton and editable by the admin via `PATCH /api/staff/settings`. Allowed values: `tranzak`, `neero`, `none`.
+The active gateway is stored in the `Setting` singleton and editable by the admin via `PATCH /api/staff/settings`. Allowed values: `neero`, `none`.
 
 - If active = `none`, payment/withdrawal endpoints return `errorCode = 3001` (`gateway_unavailable`).
 - On gateway errors during initiation, the notification emails configured in `Setting.notificationEmails` are emailed with the raw error.
 - Callbacks are matched by either our friendly id (sent as `mchTransactionRef` / `externalReference`) or the gateway's own reference. Both Payment and Withdrawal flows are idempotent.
 
-### Tranzak
-The official setup guide (PDF) points to the developer portal but doesn't include exact routes. The adapter (`src/services/gateways/tranzak.js`) uses Tranzak's standard payment-request flow — adjust the route strings inside that file once you have the up-to-date docs from <https://docs.developer.tranzak.me>. The shape returned to the rest of the app is what matters.
-
 ### Neero
-Implemented exactly as documented in `Neero API documentation.docx`:
-- Basic auth, secret key as username.
-- `POST /api/v1/payment-methods` for both MoMo (per phone number) and merchant payment methods. The merchant PM id is stored in `NEERO_MERCHANT_PM_ID`.
-- `POST /api/v1/transaction-intents/cash-in` to collect, `cash-out` to pay out.
+Implemented from the Neero Postman collection:
+- HTTP Basic auth — secret key as the username, password is empty.
+- `POST /api/v1/payment-methods` to create a MoMo (MTN / Orange) `MOBILE_MONEY` payment method per phone number. The merchant `NEERO_MERCHANT` payment method id is created once in the dashboard and stored in `NEERO_MERCHANT_PM_ID`.
+- `POST /api/v1/transaction-intents/cash-in` to collect (paymentType `MERCHANT_COLLECTION`).
+- `POST /api/v1/transaction-intents/cash-out` to pay out (paymentType `MTN_MONEY_TRANSFER` or `ORANGE_MONEY_TRANSFER`).
+- Both intents are created with `confirm: true` and `externalTransactionId` set to our internal reference.
 - `GET  /api/v1/transaction-intents/:id` to verify.
 
 ## Accounting

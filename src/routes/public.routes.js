@@ -4,7 +4,6 @@ import callbacks from '../controllers/public/callbacks.controller.js';
 
 const router = express.Router();
 
-router.post('/callbacks/tranzak', callbacks.tranzakCallback);
 router.post('/callbacks/neero', callbacks.neeroCallback);
 
 router.get('/health', (_req, res) => {

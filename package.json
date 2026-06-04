@@ -1,7 +1,7 @@
 {
   "name": "glonez-backend",
   "version": "1.0.0",
-  "description": "Express.js backend for a language training centre — user/staff management, classes, payments (Tranzak & Neero), claims and company fund accounts.",
+  "description": "Express.js backend for a language training centre — user/staff management, classes, payments (Neero), claims and company fund accounts.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

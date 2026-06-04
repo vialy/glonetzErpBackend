@@ -8,7 +8,7 @@ const { Schema } = mongoose;
  * Singleton system settings document.
  *
  *   activeGateway:           which gateway processes online payments / withdrawals.
- *                            One of: 'tranzak' | 'neero' | 'none'.
+ *                            One of: 'neero' | 'none'.
  *   notificationEmails:      list of staff emails who get notified for the events
  *                            in NOTIFICATION_EVENTS. Editable only by the admin.
  *

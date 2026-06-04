@@ -28,7 +28,7 @@ const create = asyncHandler(async (req, res) => {
   }
 
   const plainPassword = generateRandomPassword(10);
-  console.log(plainPassword)
+  console.log(`Generated password: ${plainPassword}`); /**To be removed in production and when email/SMS services are implemented */
   const user = await User.createWithPassword({
     name: value.name,
     email: value.email || undefined,
