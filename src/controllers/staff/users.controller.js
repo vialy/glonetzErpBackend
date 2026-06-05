@@ -10,10 +10,10 @@ import { ERROR_CODES } from '../../config/index.js';
 
 const createSchema = Joi.object({
   name: Joi.string().min(1).max(120).required(),
+  phone: Joi.string().min(6).max(30).required(),
   email: Joi.string().email().allow(null, ''),
-  phone: Joi.string().min(6).max(30).allow(null, ''),
   classId: Joi.string().allow(null, ''), // friendly id of the class to assign
-}).or('email', 'phone');
+});
 
 const create = asyncHandler(async (req, res) => {
   const value = await createSchema.validateAsync(req.body);
@@ -32,13 +32,15 @@ const create = asyncHandler(async (req, res) => {
   const user = await User.createWithPassword({
     name: value.name,
     email: value.email || undefined,
-    phone: value.phone || undefined,
+    phone: value.phone,
     plainPassword,
     classId: classDoc ? classDoc._id : undefined,
     createdByStaffId: req.staff._id,
   });
 
-  // Deliver credentials by whichever channel the staff provided
+  // Credentials are always SMS'd to the phone (now required). If an email is
+  // also on file, send a copy there as well — handy for record-keeping.
+  await smsService.sendUserCredentials({ to: value.phone, name: value.name, password: plainPassword });
   if (value.email) {
     await emailService.sendUserCredentials({
       to: value.email,
@@ -46,8 +48,6 @@ const create = asyncHandler(async (req, res) => {
       password: plainPassword,
       kind: 'email',
     });
-  } else if (value.phone) {
-    await smsService.sendUserCredentials({ to: value.phone, name: value.name, password: plainPassword });
   }
 
   return ok(res, {

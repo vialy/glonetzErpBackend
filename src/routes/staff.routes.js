@@ -38,6 +38,7 @@ router.patch('/classes/:classId', managerOrAbove(), classes.update);
 
 // Payments
 router.get('/payments', payments.list);
+router.get('/payments/class-summary', payments.classSummary);
 router.get('/payments/:paymentId', payments.getOne);
 router.post('/payments/manual', managerOrAbove(), payments.recordManual);
 

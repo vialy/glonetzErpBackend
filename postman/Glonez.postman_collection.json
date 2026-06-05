@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Glonez Backend",
-    "description": "Glonez language training centre — Staff + User endpoints, Neero gateway (with anti-spoof callback re-verification), claims, accounts, transfers and withdrawals.\n\nUsage:\n1. Import the matching environment (Development, Staging, or Production).\n2. Run `Staff › Auth › Login` or `User › Auth › Login` — the test script automatically saves `staffToken` / `userToken` to your environment.\n3. All staff/user requests pick up the token via `{{staffToken}}` / `{{userToken}}`.\n\nDev mode (NODE_ENV != production):\nThe backend routes payment & withdrawal calls to an in-process simulator, so use `+237670000001` (the value of `{{devTestPhone}}`) as the phone. Send header `x-simulate-outcome: failed` to force a failed outcome (default = success).\n\nNeero callbacks:\nOne endpoint receives both payment and withdrawal callbacks (`POST /api/public/callbacks/neero`). The server discriminates by the prefix of `externalTransactionId` (`PAY-…` → Payment, `WDR-…` → Withdrawal). PENDING callbacks are acknowledged and ignored. For non-pending callbacks, the server re-queries Neero using the stored `gatewayReference` (the Neero `transactionIntentId`) — the callback body itself never drives the status update, eliminating spoofing.\n\nPagination: list endpoints accept `pageNum` (default 1) and `pageSize` (default 10).\n\nResponse shape: every endpoint returns HTTP 200 with `{ success, data, errorMsg, errorCode }`. Frontends gate on `success` + `errorCode`.",
+    "description": "Glonez language training centre — Staff + User endpoints, Neero gateway (with anti-spoof callback re-verification + type/amount cross-check), claims, accounts, transfers, withdrawals, and partial-payment support.\n\nUsage:\n1. Import the matching environment (Development, Staging, or Production).\n2. Run `Staff › Auth › Login` or `User › Auth › Login` — the test script automatically saves `staffToken` / `userToken` to your environment.\n3. All staff/user requests pick up the token via `{{staffToken}}` / `{{userToken}}`.\n\nUser accounts: only staff can create users. `phone` is **required** (credentials are SMS'd); `email` is optional (extra copy emailed if present).\n\nPartial payments: `POST /users/payments/initiate` accepts an optional `amount`. If omitted, it defaults to whatever is still owed on the class. The server validates `amount <= remaining` (pending intents count against `remaining`). Use `GET /users/payments/class-summary[/:classId]` (or the staff equivalent `GET /staff/payments/class-summary?userId=&classId=`) to see `{ expected, paid, pending, remaining, fullyPaid, paymentsCount }`.\n\nDev mode (NODE_ENV != production):\nThe backend routes payment & withdrawal calls to an in-process simulator, so use `+237670000001` (the value of `{{devTestPhone}}`) as the phone. Send header `x-simulate-outcome: failed` to force a failed outcome (default = success).\n\nNeero callbacks:\nOne endpoint receives both payment and withdrawal callbacks (`POST /api/public/callbacks/neero`). The server discriminates by the prefix of `externalTransactionId` (`PAY-…` → Payment, `WDR-…` → Withdrawal). PENDING callbacks are acknowledged and ignored. For non-pending callbacks, the server re-queries Neero using the stored `gatewayReference` (the Neero `transactionIntentId`) and additionally cross-checks the returned intent's `type` (must be `CASHIN` for payments, `CASHOUT` for withdrawals) and `amount`. The callback body itself never drives the status update — spoofed payloads are dropped.\n\nNeero payment-method cache:\nThe server keeps a local `(phoneNumber, provider) → neeroPaymentMethodId` cache so repeat payments and withdrawals skip the extra `POST /payment-methods` round-trip.\n\nPagination: list endpoints accept `pageNum` (default 1) and `pageSize` (default 10).\n\nResponse shape: every endpoint returns HTTP 200 with `{ success, data, errorMsg, errorCode }`. Frontends gate on `success` + `errorCode`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "8a3f0a92-glonez-1b3c-4a5d-9e2f-collection01"
   },
@@ -204,8 +204,9 @@
             "url": { "raw": "{{baseUrl}}/api/staff/users", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"phone\": \"{{devTestPhone}}\",\n  \"classId\": \"{{classFriendlyId}}\"\n}"
-            }
+              "raw": "{\n  \"name\": \"Test User\",\n  \"phone\": \"{{devTestPhone}}\",\n  \"email\": \"testuser@example.com\",\n  \"classId\": \"{{classFriendlyId}}\"\n}"
+            },
+            "description": "Phone is required (credentials are SMS'd). Email is optional — if provided a copy of the credentials is also emailed."
           }
         },
         {
@@ -364,6 +365,22 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
             "url": { "raw": "{{baseUrl}}/api/staff/payments/{{paymentFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "payments", "{{paymentFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Class payment summary (for user)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/payments/class-summary?userId={{userFriendlyId}}&classId={{classFriendlyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "payments", "class-summary"],
+              "query": [
+                { "key": "userId", "value": "{{userFriendlyId}}" },
+                { "key": "classId", "value": "{{classFriendlyId}}" }
+              ]
+            }
           }
         },
         {
@@ -819,6 +836,39 @@
                 { "key": "pageSize", "value": "10" }
               ]
             }
+          }
+        },
+        {
+          "name": "Class payment summary (my class)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/class-summary", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "class-summary"] }
+          }
+        },
+        {
+          "name": "Class payment summary (specific class)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/class-summary/{{classFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "class-summary", "{{classFriendlyId}}"] }
+          }
+        },
+        {
+          "name": "Initiate partial payment (specify amount)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-simulate-outcome", "value": "success" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/users/payments/initiate", "host": ["{{baseUrl}}"], "path": ["api", "users", "payments", "initiate"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 15000,\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"provider\": \"mtn\"\n}"
+            },
+            "description": "Pay only part of the class fee. Server validates amount <= remaining (pending intents count against remaining). Omit `amount` to default to the full remaining balance."
           }
         },
         {

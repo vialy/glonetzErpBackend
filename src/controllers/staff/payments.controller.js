@@ -48,6 +48,34 @@ const getOne = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Staff view of a user's payment status against a class. Requires both
+ * `userId` and `classId` (friendly ids) as query params.
+ */
+const classSummary = asyncHandler(async (req, res) => {
+  const { userId, classId } = req.query;
+  if (!userId || !classId) return fail(res, req.$t('validation_error'), ERROR_CODES.VALIDATION);
+  const user = await User.findOne({ userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  const cls = await Class.findByFriendlyId(classId);
+  if (!cls) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
+
+  const summary = await Payment.classSummary(user._id, cls._id, cls.fee, cls.currencyCode);
+  const payments = await Payment
+    .find({ userId: user._id, classId: cls._id })
+    .sort('-createdAt');
+
+  return ok(res, {
+    user: { userId: user.userId, name: user.name, email: user.email, phone: user.phone },
+    class: {
+      classId: cls.classId, title: cls.title, fee: cls.fee, currencyCode: cls.currencyCode,
+      startDate: cls.startDate, endDate: cls.endDate,
+    },
+    summary,
+    payments,
+  });
+});
+
+/**
  * Manual payment — staff records that a user paid for a class outside the
  * online gateways (cash, bank, etc.). Multiple manual payments per user/class
  * are allowed since the spec calls for it.
@@ -55,7 +83,7 @@ const getOne = asyncHandler(async (req, res) => {
 const manualSchema = Joi.object({
   userId: Joi.string().required(),     // friendly id
   classId: Joi.string().required(),    // friendly id
-  amount: Joi.number().min(0).required(),
+  amount: Joi.number().min(1).required(),
   note: Joi.string().allow('', null),
   status: Joi.string().valid(PAYMENT_STATUSES.SUCCESSFUL, PAYMENT_STATUSES.PENDING).default(PAYMENT_STATUSES.SUCCESSFUL),
 });
@@ -66,6 +94,19 @@ const recordManual = asyncHandler(async (req, res) => {
   if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
   const cls = await Class.findByFriendlyId(value.classId);
   if (!cls) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
+
+  // Block over-payment past the remaining class fee (pending payments count too)
+  const summary = await Payment.classSummary(user._id, cls._id, cls.fee, cls.currencyCode);
+  if (summary.remaining <= 0) {
+    return fail(res, req.$t('class_fully_paid'), ERROR_CODES.VALIDATION);
+  }
+  if (value.amount > summary.remaining) {
+    return fail(
+      res,
+      `${req.$t('payment_exceeds_remaining')} (${summary.remaining} ${cls.currencyCode})`,
+      ERROR_CODES.VALIDATION
+    );
+  }
 
   const payment = await Payment.create({
     userId: user._id,
@@ -104,4 +145,4 @@ const recordManual = asyncHandler(async (req, res) => {
   return ok(res, { payment, message: req.$t('manual_payment_recorded') });
 });
 
-export default { list, getOne, recordManual };
+export default { list, getOne, classSummary, recordManual };

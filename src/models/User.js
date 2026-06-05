@@ -11,7 +11,7 @@ const userSchema = new Schema(
     userId: { type: String, unique: true, index: true },
     name: { type: String, required: true, trim: true },
     email: { type: String, lowercase: true, trim: true, index: true, sparse: true, unique: true },
-    phone: { type: String, trim: true, index: true, sparse: true, unique: true },
+    phone: { type: String, required: true, trim: true, index: true, unique: true },
     passwordHash: { type: String, required: true, select: false },
     hsCp: { type: Boolean, default: false }, // hasChangedPassword
     classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
@@ -24,8 +24,10 @@ const userSchema = new Schema(
 
 userSchema.pre('validate', function preValidate(next) {
   if (!this.userId) this.userId = generateFriendlyId('user');
-  if (!this.email && !this.phone) {
-    return next(new Error('user_email_or_phone_required'));
+  if (!this.phone) {
+    // Mongoose will also flag this via the `required` constraint, but raise
+    // the canonical i18n key here for the API error envelope.
+    return next(new Error('user_phone_required'));
   }
   next();
 });

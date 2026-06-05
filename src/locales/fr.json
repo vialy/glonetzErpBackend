@@ -16,6 +16,7 @@
   "user_created": "Utilisateur créé. Ses identifiants lui ont été envoyés.",
   "user_not_found": "Utilisateur introuvable.",
   "user_email_or_phone_required": "L'e-mail ou le numéro de téléphone doit être fourni.",
+  "user_phone_required": "Le numéro de téléphone est requis.",
   "user_already_exists": "Un utilisateur avec cet e-mail ou téléphone existe déjà.",
   "user_assigned_to_class": "L'utilisateur a été affecté à la classe.",
   "users_batch_assigned": "Les utilisateurs ont été affectés à la classe.",
@@ -35,6 +36,8 @@
   "payment_already_settled": "Ce paiement a déjà été réglé.",
   "manual_payment_recorded": "Paiement manuel enregistré.",
   "payments_currently_unavailable": "Les paiements sont indisponibles. Veuillez réessayer plus tard.",
+  "payment_exceeds_remaining": "Le montant dépasse ce qui reste dû pour cette classe.",
+  "class_fully_paid": "Les frais de cette classe ont été entièrement payés.",
 
   "claim_submitted": "Votre réclamation a été soumise pour examen.",
   "claim_not_found": "Réclamation introuvable.",

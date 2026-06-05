@@ -16,6 +16,7 @@
   "user_created": "User created. Credentials have been sent to them.",
   "user_not_found": "User not found.",
   "user_email_or_phone_required": "Either email or phone number must be provided.",
+  "user_phone_required": "Phone number is required.",
   "user_already_exists": "A user with this email or phone already exists.",
   "user_assigned_to_class": "User has been assigned to the class.",
   "users_batch_assigned": "Users have been assigned to the class.",
@@ -35,6 +36,8 @@
   "payment_already_settled": "This payment has already been settled.",
   "manual_payment_recorded": "Manual payment recorded.",
   "payments_currently_unavailable": "Payments are currently unavailable. Please try again later.",
+  "payment_exceeds_remaining": "The amount exceeds what is still owed for this class.",
+  "class_fully_paid": "This class fee has been fully paid.",
 
   "claim_submitted": "Your claim has been submitted for review.",
   "claim_not_found": "Claim not found.",

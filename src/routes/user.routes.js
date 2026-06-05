@@ -38,6 +38,8 @@ router.get('/my-class', profile.myClass);
 
 router.get('/payments', payments.list);
 router.get('/payments/pending', payments.pending);
+router.get('/payments/class-summary', payments.classSummary);
+router.get('/payments/class-summary/:classId', payments.classSummary);
 router.post('/payments/initiate', payments.initiate);
 
 router.get('/claims', claims.list);

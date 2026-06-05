@@ -82,6 +82,60 @@ paymentSchema.statics.allForUser = function allForUser(userObjectId) {
   return this.find({ userId: userObjectId }).sort('-createdAt');
 };
 
+/**
+ * Summarize a user's payment status against a given class. Used to support
+ * partial payments — a user can pay any subset of the class fee, across
+ * multiple Payment records, until the class fee is fully covered.
+ *
+ * Returns:
+ *   {
+ *     expected,      // class.fee
+ *     paid,          // sum of SUCCESSFUL payments
+ *     pending,       // sum of PENDING payments
+ *     remaining,     // max(expected - paid - pending, 0)
+ *     fullyPaid,     // boolean (paid alone >= expected)
+ *     currencyCode,
+ *     paymentsCount, // total payments on record (any status)
+ *   }
+ *
+ * Pending payments are subtracted from `remaining` so a user can't accidentally
+ * over-pay by stacking pending intents.
+ */
+paymentSchema.statics.classSummary = async function classSummary(userObjectId, classObjectId, classFee, currencyCode) {
+  const agg = await this.aggregate([
+    { $match: { userId: userObjectId, classId: classObjectId } },
+    {
+      $group: {
+        _id: '$status',
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  let paid = 0;
+  let pending = 0;
+  let paymentsCount = 0;
+  for (const row of agg) {
+    paymentsCount += row.count;
+    if (row._id === PAYMENT_STATUSES.SUCCESSFUL) paid = row.total;
+    else if (row._id === PAYMENT_STATUSES.PENDING) pending = row.total;
+  }
+
+  const expected = Number(classFee) || 0;
+  const remaining = Math.max(expected - paid - pending, 0);
+
+  return {
+    expected,
+    paid,
+    pending,
+    remaining,
+    fullyPaid: paid >= expected && expected > 0,
+    currencyCode,
+    paymentsCount,
+  };
+};
+
 paymentSchema.statics.markSettled = async function markSettled(paymentId, payload = {}) {
   return this.findOneAndUpdate(
     { paymentId, status: PAYMENT_STATUSES.PENDING },

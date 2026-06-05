@@ -36,13 +36,16 @@ const pending = asyncHandler(async (req, res) => {
 });
 
 /**
- * Initiate an online payment for the user's assigned class. The amount is
- * pulled from the class (not from the request), per spec.
+ * Initiate an online payment for the user's assigned class.
  *
- * For MoMo gateways (Neero), the user provides their MoMo phone + provider.
+ * Partial payments are supported: the user MAY pass an `amount` to pay only a
+ * portion of the class fee. If omitted, we default to the remaining balance.
+ * The amount is validated against `Payment.classSummary` so the user can never
+ * over-pay (pending intents also count against remaining).
  */
 const initiateSchema = Joi.object({
   classId: Joi.string(), // friendly id; defaults to the user's assigned class
+  amount: Joi.number().min(1), // optional — defaults to remaining
   phoneNumber: Joi.string().min(6).max(30),
   provider: Joi.string().valid(...Object.values(WITHDRAWAL_ACCOUNT_PROVIDERS)),
   returnUrl: Joi.string().uri().allow('', null),
@@ -60,13 +63,31 @@ const initiate = asyncHandler(async (req, res) => {
   }
   if (!classDoc) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
 
+  // Check what's left to pay (pending intents count against remaining)
+  const summary = await Payment.classSummary(
+    req.user._id, classDoc._id, classDoc.fee, classDoc.currencyCode
+  );
+  if (summary.remaining <= 0) {
+    return fail(res, req.$t('class_fully_paid'), ERROR_CODES.VALIDATION);
+  }
+
+  // Default to remaining; validate that the requested amount fits.
+  const amount = value.amount != null ? value.amount : summary.remaining;
+  if (amount > summary.remaining) {
+    return fail(
+      res,
+      `${req.$t('payment_exceeds_remaining')} (${summary.remaining} ${classDoc.currencyCode})`,
+      ERROR_CODES.VALIDATION
+    );
+  }
+
   // Create the pending payment first so we have a friendly id to pass as a reference
   const payment = await Payment.create({
     userId: req.user._id,
     userFriendlyId: req.user.userId,
     classId: classDoc._id,
     classFriendlyId: classDoc.classId,
-    amount: classDoc.fee,
+    amount,
     currencyCode: classDoc.currencyCode,
     classStartDate: classDoc.startDate,
     classEndDate: classDoc.endDate,
@@ -133,4 +154,47 @@ const initiate = asyncHandler(async (req, res) => {
   }
 });
 
-export default { list, pending, initiate };
+/**
+ * Payment status for the user against a class. Defaults to the user's assigned
+ * class. Returns the summary plus a flat list of payments for that class.
+ *
+ * Response:
+ *   {
+ *     class: { classId, title, fee, currencyCode, startDate, endDate },
+ *     summary: { expected, paid, pending, remaining, fullyPaid, currencyCode, paymentsCount },
+ *     payments: [ ...class payments ordered by createdAt desc ]
+ *   }
+ */
+const classSummary = asyncHandler(async (req, res) => {
+  const classFriendlyId = req.query.classId || req.params.classId;
+  let classDoc;
+  if (classFriendlyId) {
+    classDoc = await Class.findByFriendlyId(classFriendlyId);
+  } else if (req.user.classId) {
+    classDoc = await Class.findById(req.user.classId);
+  }
+  if (!classDoc) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
+
+  const summary = await Payment.classSummary(
+    req.user._id, classDoc._id, classDoc.fee, classDoc.currencyCode
+  );
+
+  const payments = await Payment
+    .find({ userId: req.user._id, classId: classDoc._id })
+    .sort('-createdAt');
+
+  return ok(res, {
+    class: {
+      classId: classDoc.classId,
+      title: classDoc.title,
+      fee: classDoc.fee,
+      currencyCode: classDoc.currencyCode,
+      startDate: classDoc.startDate,
+      endDate: classDoc.endDate,
+    },
+    summary,
+    payments,
+  });
+});
+
+export default { list, pending, initiate, classSummary };
