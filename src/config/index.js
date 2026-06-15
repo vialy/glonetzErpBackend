@@ -195,6 +195,12 @@ const config = {
   sms: {
     provider: env('SMS_PROVIDER', 'stub'),
     from: env('SMS_FROM', 'Glonez'),
+    twilio: {
+      accountSid: env('TWILIO_ACCOUNT_SID'),
+      authToken: env('TWILIO_AUTH_TOKEN'),
+      from: env('TWILIO_FROM'),
+      messagingServiceSid: env('TWILIO_MESSAGING_SERVICE_SID'),
+    },
   },
 
   gateways: {

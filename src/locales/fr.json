@@ -65,5 +65,7 @@
   "gateway_error": "La passerelle de paiement a retourné une erreur.",
 
   "settings_updated": "Paramètres mis à jour.",
-  "password_changed": "Mot de passe modifié avec succès."
+  "password_changed": "Mot de passe modifié avec succès.",
+  "password_regenerated": "Un nouveau mot de passe a été généré et envoyé. Le titulaire du compte devra le changer lors de sa prochaine connexion.",
+  "cannot_regenerate_admin_password": "Les mots de passe des administrateurs ne peuvent pas être régénérés via ce point de terminaison."
 }

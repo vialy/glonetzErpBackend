@@ -22,7 +22,7 @@ const create = asyncHandler(async (req, res) => {
   const exists = await Staff.exists(value.email);
   if (exists) return fail(res, req.$t('staff_already_exists'), ERROR_CODES.CONFLICT);
 
-  const plain = generateRandomPassword(10);
+  const plain = generateRandomPassword(8);
   const staff = await Staff.createWithPassword({
     name: value.name,
     email: value.email,
@@ -79,4 +79,31 @@ const update = asyncHandler(async (req, res) => {
   return ok(res, { staff: staff.toSafeJSON() });
 });
 
-export default { create, list, getOne, update };
+// Admin-triggered password regeneration for a staff member. Generates a new
+// random password, forces the staff to change it on next login (hsCp -> false)
+// and emails the credentials — same flow used when the staff account was first
+// created. Admin accounts cannot be regenerated this way.
+const regeneratePassword = asyncHandler(async (req, res) => {
+  const staff = await Staff.findOne({ staffId: req.params.staffId });
+  if (!staff) return fail(res, req.$t('staff_not_found'), ERROR_CODES.NOT_FOUND);
+  if (staff.role === STAFF_ROLES.ADMIN) {
+    return fail(res, req.$t('cannot_regenerate_admin_password'), ERROR_CODES.FORBIDDEN);
+  }
+
+  const plain = generateRandomPassword(8);
+  await staff.resetPassword(plain);
+
+  await emailService.sendStaffCredentials({
+    to: staff.email,
+    name: staff.name,
+    role: STAFF_ROLE_NAMES[staff.role],
+    password: plain,
+  });
+
+  return ok(res, {
+    staff: staff.toSafeJSON(),
+    message: req.$t('password_regenerated'),
+  });
+});
+
+export default { create, list, getOne, update, regeneratePassword };

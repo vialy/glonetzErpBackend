@@ -65,5 +65,7 @@
   "gateway_error": "The payment gateway returned an error.",
 
   "settings_updated": "Settings updated.",
-  "password_changed": "Password changed successfully."
+  "password_changed": "Password changed successfully.",
+  "password_regenerated": "A new password has been generated and sent. The account holder will be required to change it on next login.",
+  "cannot_regenerate_admin_password": "Administrator passwords cannot be regenerated through this endpoint."
 }

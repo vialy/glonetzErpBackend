@@ -68,6 +68,14 @@ staffSchema.methods.setPassword = async function setPassword(plain) {
   return this.save();
 };
 
+// Used when an admin regenerates a staff member's password — forces a fresh
+// first-login password change by resetting hsCp to false.
+staffSchema.methods.resetPassword = async function resetPassword(plain) {
+  this.passwordHash = await hash(plain);
+  this.hsCp = false;
+  return this.save();
+};
+
 staffSchema.methods.toSafeJSON = function toSafeJSON() {
   const obj = this.toObject({ virtuals: true });
   delete obj.passwordHash;

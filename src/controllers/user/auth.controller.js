@@ -34,7 +34,9 @@ const login = asyncHandler(async (req, res) => {
 
 const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().min(1).required(),
-  newPassword: Joi.string().min(8).max(128).required(),
+  // New password must be exactly 8 characters to match the generated password
+  // length issued on account creation / regeneration.
+  newPassword: Joi.string().length(8).required(),
 });
 
 const changePassword = asyncHandler(async (req, res) => {

@@ -14,9 +14,10 @@ export async function compare(plain, hashed) {
 
 /**
  * Strong, readable random password.
- * 10 chars from a pool excluding ambiguous characters.
+ * 8 chars from a pool excluding ambiguous characters — matches the length
+ * users are required to enter when changing their password.
  */
-export function generateRandomPassword(length = 10) {
+export function generateRandomPassword(length = 8) {
   const pool = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%';
   const bytes = crypto.randomBytes(length);
   let out = '';

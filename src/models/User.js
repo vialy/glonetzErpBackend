@@ -83,6 +83,14 @@ userSchema.methods.setPassword = async function setPassword(plain) {
   return this.save();
 };
 
+// Used when staff regenerates a user's password — forces a fresh first-login
+// password change by resetting hsCp to false.
+userSchema.methods.resetPassword = async function resetPassword(plain) {
+  this.passwordHash = await hash(plain);
+  this.hsCp = false;
+  return this.save();
+};
+
 userSchema.methods.toSafeJSON = function toSafeJSON() {
   const obj = this.toObject();
   delete obj.passwordHash;

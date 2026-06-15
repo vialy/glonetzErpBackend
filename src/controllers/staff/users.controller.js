@@ -27,8 +27,8 @@ const create = asyncHandler(async (req, res) => {
     if (!classDoc) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
   }
 
-  const plainPassword = generateRandomPassword(10);
-  console.log(`Generated password: ${plainPassword}`); /**To be removed in production and when email/SMS services are implemented */
+  const plainPassword = generateRandomPassword(8);
+  // console.log(`Generated password: ${plainPassword}`); /**To be removed in production and when email/SMS services are implemented */
   const user = await User.createWithPassword({
     name: value.name,
     email: value.email || undefined,
@@ -116,4 +116,30 @@ const update = asyncHandler(async (req, res) => {
   return ok(res, { user: user.toSafeJSON() });
 });
 
-export default { create, list, getOne, batchAssignToClass, update };
+// Generates a new random password for an existing user, forces them to change
+// it on next login (hsCp -> false) and dispatches the credentials via SMS
+// (always) and email (when available) — same channels used at account creation.
+const regeneratePassword = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+
+  const plainPassword = generateRandomPassword(8);
+  await user.resetPassword(plainPassword);
+
+  await smsService.sendUserCredentials({ to: user.phone, name: user.name, password: plainPassword });
+  if (user.email) {
+    await emailService.sendUserCredentials({
+      to: user.email,
+      name: user.name,
+      password: plainPassword,
+      kind: 'email',
+    });
+  }
+
+  return ok(res, {
+    user: user.toSafeJSON(),
+    message: req.$t('password_regenerated'),
+  });
+});
+
+export default { create, list, getOne, batchAssignToClass, update, regeneratePassword };

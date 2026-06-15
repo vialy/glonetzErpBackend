@@ -28,6 +28,7 @@ router.post('/users', managerOrAbove(), users.create);
 router.get('/users', users.list);
 router.get('/users/:userId', users.getOne);
 router.patch('/users/:userId', managerOrAbove(), users.update);
+router.post('/users/:userId/regenerate-password', managerOrAbove(), users.regeneratePassword);
 router.post('/users/batch-assign-class', managerOrAbove(), users.batchAssignToClass);
 
 // Classes
@@ -65,6 +66,7 @@ router.post('/staff', adminOnly(), staffMgmt.create);
 router.get('/staff', adminOnly(), staffMgmt.list);
 router.get('/staff/:staffId', adminOnly(), staffMgmt.getOne);
 router.patch('/staff/:staffId', adminOnly(), staffMgmt.update);
+router.post('/staff/:staffId/regenerate-password', adminOnly(), staffMgmt.regeneratePassword);
 
 // Settings — admin only
 router.get('/settings', adminOnly(), settings.get);
