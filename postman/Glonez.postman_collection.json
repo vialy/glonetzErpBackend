@@ -264,6 +264,22 @@
               "raw": "{\n  \"userIds\": [\"{{userFriendlyId}}\"],\n  \"classId\": \"{{classFriendlyId}}\"\n}"
             }
           }
+        },
+        {
+          "name": "Bulk create users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/batch", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "batch"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"options\": {\n    \"skipDuplicates\": true\n  },\n  \"users\": [\n    {\n      \"name\": \"Jean Dupont\",\n      \"phone\": \"+237677100123\",\n      \"classId\": \"{{classFriendlyId}}\"\n    },\n    {\n      \"name\": \"Awa Ndiaye\",\n      \"phone\": \"+237699221144\",\n      \"email\": \"awa@example.com\",\n      \"classId\": \"{{classFriendlyId}}\"\n    }\n  ]\n}"
+            },
+            "description": "Create up to 500 users in one call.\n\n- Per-row: `name` and `phone` required; `email` and `classId` optional.\n- `options.skipDuplicates` (default `true`): a row whose phone or email already exists is moved to `skipped` rather than failing the row.\n- Returns `{ summary, created, skipped, failed }`. Each list carries the original row `index` so the UI can map outcomes back to its grid.\n- Credentials are SMS'd to every created user (email copy when provided). One transport failing does not roll back the user record."
+          }
         }
       ]
     },

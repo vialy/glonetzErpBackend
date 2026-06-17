@@ -20,6 +20,7 @@
   "user_already_exists": "A user with this email or phone already exists.",
   "user_assigned_to_class": "User has been assigned to the class.",
   "users_batch_assigned": "Users have been assigned to the class.",
+  "users_batch_created": "Users batch processed.",
 
   "staff_created": "Staff member created. Credentials have been sent to them.",
   "staff_not_found": "Staff member not found.",

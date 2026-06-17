@@ -87,6 +87,144 @@ const getOne = asyncHandler(async (req, res) => {
   return ok(res, { user });
 });
 
+/**
+ * Bulk-create users. Each row is processed independently so a single bad
+ * record doesn't fail the entire batch. The response surfaces three lists
+ * keyed by the original row index so the staff UI can highlight per-row
+ * outcomes:
+ *
+ *   created  — successfully created users (creds delivered)
+ *   skipped  — duplicates (only populated when options.skipDuplicates=true)
+ *   failed   — validation / lookup / DB errors
+ *
+ * options.skipDuplicates (default true): when a phone or email already maps
+ * to a user, skip silently. When false, the duplicate is reported under
+ * `failed` with a CONFLICT error.
+ */
+const bulkCreateRowSchema = Joi.object({
+  name: Joi.string().min(1).max(120).required(),
+  phone: Joi.string().min(6).max(30).required(),
+  email: Joi.string().email().allow(null, ''),
+  classId: Joi.string().allow(null, ''),
+});
+
+const bulkCreateSchema = Joi.object({
+  options: Joi.object({
+    skipDuplicates: Joi.boolean().default(true),
+  }).default({ skipDuplicates: true }),
+  users: Joi.array().items(Joi.any()).min(1).max(500).required(),
+});
+
+const bulkCreate = asyncHandler(async (req, res) => {
+  const value = await bulkCreateSchema.validateAsync(req.body);
+  const skipDuplicates = value.options.skipDuplicates;
+
+  // Cache class lookups so we don't re-query the same friendly id N times
+  const classCache = new Map();
+  async function resolveClass(classFriendlyId) {
+    if (!classFriendlyId) return null;
+    if (classCache.has(classFriendlyId)) return classCache.get(classFriendlyId);
+    const c = await Class.findByFriendlyId(classFriendlyId);
+    classCache.set(classFriendlyId, c || null);
+    return c || null;
+  }
+
+  const created = [];
+  const skipped = [];
+  const failed = [];
+
+  for (let index = 0; index < value.users.length; index += 1) {
+    const raw = value.users[index];
+
+    // Per-row validation — failures are reported, not thrown
+    let row;
+    try {
+      row = await bulkCreateRowSchema.validateAsync(raw);
+    } catch (err) {
+      failed.push({ index, errorCode: ERROR_CODES.VALIDATION, errorMsg: err.message, input: raw });
+      continue;
+    }
+
+    try {
+      const exists = await User.existsByEmailOrPhone({ email: row.email, phone: row.phone });
+      if (exists) {
+        if (skipDuplicates) {
+          skipped.push({ index, reason: 'duplicate', phone: row.phone, email: row.email || null });
+        } else {
+          failed.push({
+            index,
+            errorCode: ERROR_CODES.CONFLICT,
+            errorMsg: req.$t('user_already_exists'),
+            input: raw,
+          });
+        }
+        continue;
+      }
+
+      let classDoc = null;
+      if (row.classId) {
+        classDoc = await resolveClass(row.classId);
+        if (!classDoc) {
+          failed.push({
+            index,
+            errorCode: ERROR_CODES.NOT_FOUND,
+            errorMsg: req.$t('class_not_found'),
+            input: raw,
+          });
+          continue;
+        }
+      }
+
+      const plainPassword = generateRandomPassword(10);
+      const user = await User.createWithPassword({
+        name: row.name,
+        email: row.email || undefined,
+        phone: row.phone,
+        plainPassword,
+        classId: classDoc ? classDoc._id : undefined,
+        createdByStaffId: req.staff._id,
+      });
+
+      // Credential delivery — SMS always, email copy when present.
+      // Use Promise.allSettled so a transport failure on one channel doesn't
+      // block the row (we still report the user as created).
+      const deliveries = [
+        smsService.sendUserCredentials({ to: row.phone, name: row.name, password: plainPassword }),
+      ];
+      if (row.email) {
+        deliveries.push(
+          emailService.sendUserCredentials({
+            to: row.email, name: row.name, password: plainPassword, kind: 'email',
+          })
+        );
+      }
+      await Promise.allSettled(deliveries);
+
+      created.push({ index, user: user.toSafeJSON() });
+    } catch (err) {
+      failed.push({
+        index,
+        errorCode: ERROR_CODES.GENERIC,
+        errorMsg: err.message || 'create_failed',
+        input: raw,
+      });
+    }
+  }
+
+  return ok(res, {
+    summary: {
+      total: value.users.length,
+      created: created.length,
+      skipped: skipped.length,
+      failed: failed.length,
+    },
+    created,
+    skipped,
+    failed,
+    message: req.$t('users_batch_created'),
+  });
+});
+
 const batchAssignSchema = Joi.object({
   userIds: Joi.array().items(Joi.string()).min(1).required(),
   classId: Joi.string().required(),
@@ -142,4 +280,4 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   });
 });
 
-export default { create, list, getOne, batchAssignToClass, update, regeneratePassword };
+export default { create, bulkCreate, list, getOne, batchAssignToClass, update, regeneratePassword };

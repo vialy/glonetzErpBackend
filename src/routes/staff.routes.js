@@ -25,6 +25,7 @@ router.post('/auth/change-password', auth.changePassword);
 
 // Users
 router.post('/users', managerOrAbove(), users.create);
+router.post('/users/batch', managerOrAbove(), users.bulkCreate);
 router.get('/users', users.list);
 router.get('/users/:userId', users.getOne);
 router.patch('/users/:userId', managerOrAbove(), users.update);

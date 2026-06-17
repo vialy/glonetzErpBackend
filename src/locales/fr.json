@@ -20,6 +20,7 @@
   "user_already_exists": "Un utilisateur avec cet e-mail ou téléphone existe déjà.",
   "user_assigned_to_class": "L'utilisateur a été affecté à la classe.",
   "users_batch_assigned": "Les utilisateurs ont été affectés à la classe.",
+  "users_batch_created": "Lot d'utilisateurs traité.",
 
   "staff_created": "Membre du personnel créé. Ses identifiants lui ont été envoyés.",
   "staff_not_found": "Membre du personnel introuvable.",
