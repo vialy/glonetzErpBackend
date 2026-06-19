@@ -6,6 +6,7 @@ import { generateRandomPassword } from '../../utils/password.js';
 import emailService from '../../services/email.service.js';
 import { ERROR_CODES, STAFF_ROLES, STAFF_ROLE_NAMES } from '../../config/index.js';
 import { readPagination } from '../../utils/pagination.js';
+import { fireAndForget } from '../../utils/fireAndForget.js';
 
 /** Admin-only staff management. */
 
@@ -29,12 +30,16 @@ const create = asyncHandler(async (req, res) => {
     role: value.role,
     plainPassword: plain,
   });
-  await emailService.sendStaffCredentials({
-    to: value.email,
-    name: value.name,
-    role: STAFF_ROLE_NAMES[value.role],
-    password: plain,
-  });
+  // Fire-and-forget: respond immediately, email lands in the background.
+  fireAndForget(
+    emailService.sendStaffCredentials({
+      to: value.email,
+      name: value.name,
+      role: STAFF_ROLE_NAMES[value.role],
+      password: plain,
+    }),
+    'email:staff-credentials'
+  );
   return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_created') });
 });
 
@@ -93,12 +98,15 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   const plain = generateRandomPassword(8);
   await staff.resetPassword(plain);
 
-  await emailService.sendStaffCredentials({
-    to: staff.email,
-    name: staff.name,
-    role: STAFF_ROLE_NAMES[staff.role],
-    password: plain,
-  });
+  fireAndForget(
+    emailService.sendStaffCredentials({
+      to: staff.email,
+      name: staff.name,
+      role: STAFF_ROLE_NAMES[staff.role],
+      password: plain,
+    }),
+    'email:staff-password-reset'
+  );
 
   return ok(res, {
     staff: staff.toSafeJSON(),

@@ -6,6 +6,7 @@ import { generateRandomPassword } from '../../utils/password.js';
 import emailService from '../../services/email.service.js';
 import smsService from '../../services/sms.service.js';
 import { readPagination } from '../../utils/pagination.js';
+import { fireAndForget } from '../../utils/fireAndForget.js';
 import { ERROR_CODES } from '../../config/index.js';
 
 const createSchema = Joi.object({
@@ -38,16 +39,23 @@ const create = asyncHandler(async (req, res) => {
     createdByStaffId: req.staff._id,
   });
 
-  // Credentials are always SMS'd to the phone (now required). If an email is
-  // also on file, send a copy there as well — handy for record-keeping.
-  await smsService.sendUserCredentials({ to: value.phone, name: value.name, password: plainPassword });
+  // Fire-and-forget: respond immediately, deliver credentials in the background.
+  // SMS goes to the (now-required) phone; if an email is on file, send a copy
+  // there too. Failures are logged but do not block the API response.
+  fireAndForget(
+    smsService.sendUserCredentials({ to: value.phone, name: value.name, password: plainPassword }),
+    'sms:user-credentials'
+  );
   if (value.email) {
-    await emailService.sendUserCredentials({
-      to: value.email,
-      name: value.name,
-      password: plainPassword,
-      kind: 'email',
-    });
+    fireAndForget(
+      emailService.sendUserCredentials({
+        to: value.email,
+        name: value.name,
+        password: plainPassword,
+        kind: 'email',
+      }),
+      'email:user-credentials'
+    );
   }
 
   return ok(res, {
@@ -185,20 +193,21 @@ const bulkCreate = asyncHandler(async (req, res) => {
         createdByStaffId: req.staff._id,
       });
 
-      // Credential delivery — SMS always, email copy when present.
-      // Use Promise.allSettled so a transport failure on one channel doesn't
-      // block the row (we still report the user as created).
-      const deliveries = [
+      // Credential delivery — fire-and-forget per channel. SMS always, email
+      // copy when present. We do NOT await: a 500-row batch shouldn't sit
+      // behind 500 sequential SMS round-trips. Failures are logged.
+      fireAndForget(
         smsService.sendUserCredentials({ to: row.phone, name: row.name, password: plainPassword }),
-      ];
+        `sms:user-credentials:bulk[${index}]`
+      );
       if (row.email) {
-        deliveries.push(
+        fireAndForget(
           emailService.sendUserCredentials({
             to: row.email, name: row.name, password: plainPassword, kind: 'email',
-          })
+          }),
+          `email:user-credentials:bulk[${index}]`
         );
       }
-      await Promise.allSettled(deliveries);
 
       created.push({ index, user: user.toSafeJSON() });
     } catch (err) {
@@ -264,14 +273,21 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   const plainPassword = generateRandomPassword(8);
   await user.resetPassword(plainPassword);
 
-  await smsService.sendUserCredentials({ to: user.phone, name: user.name, password: plainPassword });
+  // Fire-and-forget — same fast-response pattern as user creation.
+  fireAndForget(
+    smsService.sendUserCredentials({ to: user.phone, name: user.name, password: plainPassword }),
+    'sms:user-password-reset'
+  );
   if (user.email) {
-    await emailService.sendUserCredentials({
-      to: user.email,
-      name: user.name,
-      password: plainPassword,
-      kind: 'email',
-    });
+    fireAndForget(
+      emailService.sendUserCredentials({
+        to: user.email,
+        name: user.name,
+        password: plainPassword,
+        kind: 'email',
+      }),
+      'email:user-password-reset'
+    );
   }
 
   return ok(res, {
