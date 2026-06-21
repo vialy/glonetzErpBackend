@@ -13,12 +13,16 @@ const loginSchema = Joi.object({
 const login = asyncHandler(async (req, res) => {
   const value = await loginSchema.validateAsync(req.body);
   const user = await User.findByLogin(value.emailOrPhone);
-  if (!user || !user.isActive) {
+  if (!user) {
     return fail(res, req.$t('invalid_credentials'), ERROR_CODES.INVALID_CREDENTIALS);
   }
   const valid = await user.verifyPassword(value.password);
   if (!valid) {
     return fail(res, req.$t('invalid_credentials'), ERROR_CODES.INVALID_CREDENTIALS);
+  }
+  // Password matched — only now do we reveal that the account is disabled.
+  if (!user.isActive) {
+    return fail(res, req.$t('account_disabled'), ERROR_CODES.ACCOUNT_DISABLED);
   }
 
   user.lastLoginAt = new Date();

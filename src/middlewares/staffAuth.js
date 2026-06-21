@@ -23,8 +23,13 @@ export default async function staffAuth(req, res, next) {
   }
 
   const staff = await Staff.findById(decoded.sub);
-  if (!staff || !staff.isActive) {
+  if (!staff) {
     return fail(res, req.$t('unauthorized'), ERROR_CODES.UNAUTHORIZED);
+  }
+  // Disabled accounts get a distinct code so the frontend can sign the user
+  // out and show a clear message instead of a generic "session expired" UX.
+  if (!staff.isActive) {
+    return fail(res, req.$t('account_disabled'), ERROR_CODES.ACCOUNT_DISABLED);
   }
   req.staff = staff;
   req.tokenPayload = decoded;

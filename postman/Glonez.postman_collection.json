@@ -266,6 +266,23 @@
           }
         },
         {
+          "name": "Disable user",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/{{userFriendlyId}}/disable", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "{{userFriendlyId}}", "disable"] },
+            "description": "Manager+ only. A disabled user cannot log in; existing sessions return errorCode 2005 (ACCOUNT_DISABLED) on the next authenticated request."
+          }
+        },
+        {
+          "name": "Enable user",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/users/{{userFriendlyId}}/enable", "host": ["{{baseUrl}}"], "path": ["api", "staff", "users", "{{userFriendlyId}}", "enable"] }
+          }
+        },
+        {
           "name": "Bulk create users",
           "request": {
             "method": "POST",
@@ -700,7 +717,26 @@
               { "key": "Content-Type", "value": "application/json" }
             ],
             "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"isActive\": true\n}" }
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane M.\"\n}" },
+            "description": "Admin only. `isActive` is NOT accepted here — use the dedicated /disable and /enable endpoints below so the role-hierarchy guard is always applied."
+          }
+        },
+        {
+          "name": "Disable staff",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}/disable", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}", "disable"] },
+            "description": "Open to any authenticated staff, but enforces role hierarchy:\n- You cannot disable yourself (`cannot_disable_self`, 1003).\n- You cannot disable an admin (`cannot_disable_admin`, 1003).\n- Your role must be STRICTLY GREATER than the target's (`cannot_disable_higher_role`, 1003).\n\nSo a manager (600) can disable an auditor (500) or support (200); only admin can disable a manager."
+          }
+        },
+        {
+          "name": "Enable staff",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}/enable", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}", "enable"] },
+            "description": "Same role-hierarchy rules as Disable — re-enabling an auditor requires manager+ for example."
           }
         }
       ]

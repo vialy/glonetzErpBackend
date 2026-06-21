@@ -28,8 +28,11 @@ export default async function userAuth(req, res, next) {
   }
 
   const user = await User.findById(decoded.sub);
-  if (!user || !user.isActive) {
+  if (!user) {
     return fail(res, req.$t('unauthorized'), ERROR_CODES.UNAUTHORIZED);
+  }
+  if (!user.isActive) {
+    return fail(res, req.$t('account_disabled'), ERROR_CODES.ACCOUNT_DISABLED);
   }
   req.user = user;
   req.tokenPayload = decoded;

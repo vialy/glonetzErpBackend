@@ -20,12 +20,17 @@ const changePasswordSchema = Joi.object({
 const login = asyncHandler(async (req, res) => {
   const value = await loginSchema.validateAsync(req.body);
   const staff = await Staff.findByEmail(value.email);
-  if (!staff || !staff.isActive) {
+  if (!staff) {
     return fail(res, req.$t('invalid_credentials'), ERROR_CODES.INVALID_CREDENTIALS);
   }
   const valid = await staff.verifyPassword(value.password);
   if (!valid) {
     return fail(res, req.$t('invalid_credentials'), ERROR_CODES.INVALID_CREDENTIALS);
+  }
+  // Disabled-account check runs AFTER password verification so the existence
+  // of disabled accounts isn't enumerable by attackers without credentials.
+  if (!staff.isActive) {
+    return fail(res, req.$t('account_disabled'), ERROR_CODES.ACCOUNT_DISABLED);
   }
 
   staff.lastLoginAt = new Date();

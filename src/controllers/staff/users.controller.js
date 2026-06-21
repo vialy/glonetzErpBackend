@@ -251,9 +251,11 @@ const batchAssignToClass = asyncHandler(async (req, res) => {
   return ok(res, { count: users.length, message: req.$t('users_batch_assigned') });
 });
 
+// `isActive` is intentionally NOT in the update schema — toggling account
+// state goes through the dedicated /disable and /enable endpoints below so
+// the operation is auditable and uses a single code path.
 const updateSchema = Joi.object({
   name: Joi.string().min(1).max(120),
-  isActive: Joi.boolean(),
 }).min(1);
 
 const update = asyncHandler(async (req, res) => {
@@ -261,6 +263,33 @@ const update = asyncHandler(async (req, res) => {
   const user = await User.findOneAndUpdate({ userId: req.params.userId }, { $set: value }, { new: true });
   if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
   return ok(res, { user: user.toSafeJSON() });
+});
+
+/**
+ * Disable a user's account. A disabled user cannot log in and any existing
+ * staff/user-auth middleware will treat them as unauthenticated, so live
+ * sessions are also invalidated on the next request.
+ */
+const disable = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  if (user.isActive === false) {
+    return ok(res, { user: user.toSafeJSON(), message: req.$t('user_disabled') });
+  }
+  user.isActive = false;
+  await user.save();
+  return ok(res, { user: user.toSafeJSON(), message: req.$t('user_disabled') });
+});
+
+const enable = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  if (user.isActive === true) {
+    return ok(res, { user: user.toSafeJSON(), message: req.$t('user_enabled') });
+  }
+  user.isActive = true;
+  await user.save();
+  return ok(res, { user: user.toSafeJSON(), message: req.$t('user_enabled') });
 });
 
 // Generates a new random password for an existing user, forces them to change
@@ -296,4 +325,14 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   });
 });
 
-export default { create, bulkCreate, list, getOne, batchAssignToClass, update, regeneratePassword };
+export default {
+  create,
+  bulkCreate,
+  list,
+  getOne,
+  batchAssignToClass,
+  update,
+  disable,
+  enable,
+  regeneratePassword,
+};

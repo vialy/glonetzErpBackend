@@ -29,6 +29,8 @@ router.post('/users/batch', managerOrAbove(), users.bulkCreate);
 router.get('/users', users.list);
 router.get('/users/:userId', users.getOne);
 router.patch('/users/:userId', managerOrAbove(), users.update);
+router.patch('/users/:userId/disable', managerOrAbove(), users.disable);
+router.patch('/users/:userId/enable', managerOrAbove(), users.enable);
 router.post('/users/:userId/regenerate-password', managerOrAbove(), users.regeneratePassword);
 router.post('/users/batch-assign-class', managerOrAbove(), users.batchAssignToClass);
 
@@ -68,6 +70,11 @@ router.get('/staff', adminOnly(), staffMgmt.list);
 router.get('/staff/:staffId', adminOnly(), staffMgmt.getOne);
 router.patch('/staff/:staffId', adminOnly(), staffMgmt.update);
 router.post('/staff/:staffId/regenerate-password', adminOnly(), staffMgmt.regeneratePassword);
+// Enable / disable any staff — open to all authenticated staff. The
+// controller's role-hierarchy guard rejects requests that would target a
+// peer or higher role, so support/auditor effectively have no targets.
+router.patch('/staff/:staffId/disable', staffMgmt.disable);
+router.patch('/staff/:staffId/enable', staffMgmt.enable);
 
 // Settings — admin only
 router.get('/settings', adminOnly(), settings.get);

@@ -66,9 +66,11 @@ const getOne = asyncHandler(async (req, res) => {
   return ok(res, { staff: staff.toSafeJSON() });
 });
 
+// `isActive` is intentionally NOT in the update schema — toggling account
+// state goes through the dedicated /disable and /enable endpoints below so
+// the role-hierarchy guard is always applied.
 const updateSchema = Joi.object({
   name: Joi.string().min(1).max(120),
-  isActive: Joi.boolean(),
   role: Joi.number().valid(STAFF_ROLES.MANAGER, STAFF_ROLES.AUDITOR, STAFF_ROLES.SUPPORT),
 }).min(1);
 
@@ -82,6 +84,58 @@ const update = asyncHandler(async (req, res) => {
   Object.assign(staff, value);
   await staff.save();
   return ok(res, { staff: staff.toSafeJSON() });
+});
+
+/**
+ * Enforce the role-hierarchy rule for enable/disable:
+ *
+ *   - You cannot act on yourself.
+ *   - Admin accounts (role 1000) cannot be disabled.
+ *   - Otherwise the acting staff's role must be STRICTLY GREATER than the
+ *     target's role. Admin (1000) always wins because no other role can
+ *     exceed it.
+ *
+ * Returns `null` if allowed, or a failure-response helper otherwise.
+ */
+function guardHierarchy({ req, res, target }) {
+  if (target._id.equals(req.staff._id)) {
+    return fail(res, req.$t('cannot_disable_self'), ERROR_CODES.FORBIDDEN);
+  }
+  if (target.role === STAFF_ROLES.ADMIN) {
+    return fail(res, req.$t('cannot_disable_admin'), ERROR_CODES.FORBIDDEN);
+  }
+  if (req.staff.role <= target.role) {
+    return fail(res, req.$t('cannot_disable_higher_role'), ERROR_CODES.FORBIDDEN);
+  }
+  return null;
+}
+
+const disable = asyncHandler(async (req, res) => {
+  const staff = await Staff.findOne({ staffId: req.params.staffId });
+  if (!staff) return fail(res, req.$t('staff_not_found'), ERROR_CODES.NOT_FOUND);
+  const blocked = guardHierarchy({ req, res, target: staff });
+  if (blocked) return blocked;
+  if (staff.isActive === false) {
+    return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_disabled') });
+  }
+  staff.isActive = false;
+  await staff.save();
+  return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_disabled') });
+});
+
+const enable = asyncHandler(async (req, res) => {
+  const staff = await Staff.findOne({ staffId: req.params.staffId });
+  if (!staff) return fail(res, req.$t('staff_not_found'), ERROR_CODES.NOT_FOUND);
+  // Re-enabling uses the same hierarchy rules: a manager can only re-enable
+  // a support/auditor; only admin can re-enable a manager.
+  const blocked = guardHierarchy({ req, res, target: staff });
+  if (blocked) return blocked;
+  if (staff.isActive === true) {
+    return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_enabled') });
+  }
+  staff.isActive = true;
+  await staff.save();
+  return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_enabled') });
 });
 
 // Admin-triggered password regeneration for a staff member. Generates a new
@@ -114,4 +168,4 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   });
 });
 
-export default { create, list, getOne, update, regeneratePassword };
+export default { create, list, getOne, update, disable, enable, regeneratePassword };
