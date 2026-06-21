@@ -38,6 +38,7 @@ router.post('/users/batch-assign-class', managerOrAbove(), users.batchAssignToCl
 router.post('/classes', managerOrAbove(), classes.create);
 router.get('/classes', classes.list);
 router.get('/classes/:classId', classes.getOne);
+router.get('/classes/:classId/details', classes.details);
 router.patch('/classes/:classId', managerOrAbove(), classes.update);
 
 // Payments

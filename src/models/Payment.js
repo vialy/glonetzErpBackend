@@ -136,6 +136,75 @@ paymentSchema.statics.classSummary = async function classSummary(userObjectId, c
   };
 };
 
+/**
+ * Class-wide payment rollup used by the class-details endpoint.
+ *
+ * Aggregates only the SUCCESSFUL payments by student, then clamps each
+ * student's total to the class fee so a stray over-payment can't inflate the
+ * class-wide total.
+ *
+ * Inputs:
+ *   - studentObjectIds: ObjectId[] of users currently assigned to the class
+ *   - classObjectId:    ObjectId of the class
+ *   - classFee:         numeric class fee
+ *
+ * Returns:
+ *   {
+ *     studentCount,        // students currently assigned (input length)
+ *     fullyPaidCount,      // students whose successful total >= fee
+ *     totalExpected,       // studentCount * fee
+ *     totalPaid,           // sum across students of min(paid, fee)
+ *     totalRemaining,      // totalExpected - totalPaid (>= 0)
+ *     paidByStudent,       // Map<userIdString, paid> (only students with payments)
+ *   }
+ */
+paymentSchema.statics.classRollup = async function classRollup(studentObjectIds, classObjectId, classFee) {
+  const fee = Number(classFee) || 0;
+  const studentCount = studentObjectIds.length;
+  const totalExpected = studentCount * fee;
+
+  if (studentCount === 0) {
+    return {
+      studentCount: 0,
+      fullyPaidCount: 0,
+      totalExpected: 0,
+      totalPaid: 0,
+      totalRemaining: 0,
+      paidByStudent: new Map(),
+    };
+  }
+
+  const agg = await this.aggregate([
+    {
+      $match: {
+        classId: classObjectId,
+        status: PAYMENT_STATUSES.SUCCESSFUL,
+        userId: { $in: studentObjectIds },
+      },
+    },
+    { $group: { _id: '$userId', paid: { $sum: '$amount' } } },
+  ]);
+
+  const paidByStudent = new Map();
+  let totalPaid = 0;
+  let fullyPaidCount = 0;
+  for (const row of agg) {
+    const paid = row.paid || 0;
+    paidByStudent.set(String(row._id), paid);
+    totalPaid += Math.min(paid, fee);
+    if (paid >= fee && fee > 0) fullyPaidCount += 1;
+  }
+
+  return {
+    studentCount,
+    fullyPaidCount,
+    totalExpected,
+    totalPaid,
+    totalRemaining: Math.max(totalExpected - totalPaid, 0),
+    paidByStudent,
+  };
+};
+
 paymentSchema.statics.markSettled = async function markSettled(paymentId, payload = {}) {
   return this.findOneAndUpdate(
     { paymentId, status: PAYMENT_STATUSES.PENDING },

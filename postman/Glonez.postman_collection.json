@@ -356,6 +356,15 @@
           }
         },
         {
+          "name": "Class details (with enrollment + payment rollup)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/classes/{{classFriendlyId}}/details", "host": ["{{baseUrl}}"], "path": ["api", "staff", "classes", "{{classFriendlyId}}", "details"] },
+            "description": "Returns the class plus `stats`:\n- studentCount, fullyPaidCount, partiallyPaidCount, unpaidCount\n- totalExpected = studentCount * fee\n- totalPaid (each student capped at fee, so over-payments don't inflate)\n- totalRemaining = totalExpected - totalPaid"
+          }
+        },
+        {
           "name": "Update class",
           "request": {
             "method": "PATCH",
