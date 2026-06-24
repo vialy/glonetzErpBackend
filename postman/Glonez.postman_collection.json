@@ -393,12 +393,15 @@
               "query": [
                 { "key": "pageNum", "value": "1" },
                 { "key": "pageSize", "value": "10" },
-                { "key": "status", "value": "", "disabled": true },
+                { "key": "status", "value": "pending", "disabled": true, "description": "Single status — e.g. pending, successful, failed, cancelled, refunded." },
+                { "key": "status", "value": "pending,failed", "disabled": true, "description": "Comma-separated multi-status — matched as $in." },
+                { "key": "status", "value": "pending", "disabled": true, "description": "Repeat the key for multi-status: ?status=pending&status=failed" },
                 { "key": "method", "value": "", "disabled": true },
                 { "key": "userId", "value": "", "disabled": true },
                 { "key": "classId", "value": "", "disabled": true }
               ]
-            }
+            },
+            "description": "Filter by `status` as either a single value, a comma-separated list (`?status=pending,failed`), or a repeated key (`?status=pending&status=failed`). Invalid values are silently dropped."
           }
         },
         {
@@ -1034,12 +1037,12 @@
               "mode": "formdata",
               "formdata": [
                 { "key": "proof", "type": "file", "src": [] },
-                { "key": "amount", "value": "50000", "type": "text" },
-                { "key": "currencyCode", "value": "XAF", "type": "text" },
+                { "key": "paymentId", "value": "{{paymentFriendlyId}}", "type": "text", "description": "Required. Must reference one of YOUR payments that is NOT successful (pending/failed/cancelled)." },
                 { "key": "description", "value": "Paid via mobile money", "type": "text" },
                 { "key": "paymentDate", "value": "2026-05-15", "type": "text" }
               ]
-            }
+            },
+            "description": "Raise a claim against a non-successful payment. `paymentId` is mandatory; the server rejects with VALIDATION (1001) if the referenced payment is already successful, and PAYMENT_NOT_FOUND (3004) if it doesn't exist or doesn't belong to you.\n\n`amount` and `currencyCode` are NOT sent by the client — they're snapshotted from the referenced payment so the disputed sum always matches the underlying record."
           }
         }
       ]

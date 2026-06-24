@@ -13,11 +13,39 @@ import {
   NOTIFICATION_EVENTS,
 } from '../../config/index.js';
 
+/**
+ * Normalize the `status` query param into either a single string or an array.
+ * Supports any of these shapes:
+ *   ?status=pending
+ *   ?status=pending&status=failed              (Express parses as array)
+ *   ?status=pending,failed                     (comma-separated single string)
+ *   ?status[]=pending&status[]=failed          (bracket notation, also an array)
+ * Returns either a string, a deduplicated array, or undefined.
+ * Invalid status values are silently dropped.
+ */
+const VALID_PAYMENT_STATUSES = new Set(Object.values(PAYMENT_STATUSES));
+function normalizeStatusFilter(raw) {
+  if (raw == null) return undefined;
+  let list;
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === 'string' && raw.includes(',')) {
+    list = raw.split(',');
+  } else {
+    list = [raw];
+  }
+  const cleaned = [...new Set(list.map((s) => String(s).trim().toLowerCase()).filter((s) => VALID_PAYMENT_STATUSES.has(s)))];
+  if (cleaned.length === 0) return undefined;
+  return cleaned.length === 1 ? cleaned[0] : cleaned;
+}
+
 const list = asyncHandler(async (req, res) => {
-  const { status, userId, classId, method } = req.query;
+  const { userId, classId, method } = req.query;
   const { page, limit } = readPagination(req);
   const filter = {};
-  if (status) filter.status = status;
+
+  const status = normalizeStatusFilter(req.query.status);
+  if (status) filter.status = Array.isArray(status) ? { $in: status } : status;
   if (method) filter.method = method;
   if (userId) {
     const u = await User.findOne({ userId });

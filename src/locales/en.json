@@ -53,6 +53,7 @@
   "claim_resolved": "Claim has been resolved.",
   "claim_already_resolved": "This claim has already been resolved.",
   "claim_proof_required": "Proof of payment is required.",
+  "claim_payment_already_successful": "You cannot raise a claim against a payment that is already marked as successful.",
 
   "account_not_found": "Account not found.",
   "insufficient_funds": "Insufficient funds.",

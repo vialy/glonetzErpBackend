@@ -88,6 +88,7 @@ const initiate = asyncHandler(async (req, res) => {
     classId: classDoc._id,
     classFriendlyId: classDoc.classId,
     amount,
+    network_provider: value.provider,
     currencyCode: classDoc.currencyCode,
     classStartDate: classDoc.startDate,
     classEndDate: classDoc.endDate,

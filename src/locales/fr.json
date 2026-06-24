@@ -53,6 +53,7 @@
   "claim_resolved": "La réclamation a été résolue.",
   "claim_already_resolved": "Cette réclamation a déjà été résolue.",
   "claim_proof_required": "Une preuve de paiement est requise.",
+  "claim_payment_already_successful": "Vous ne pouvez pas déposer une réclamation pour un paiement déjà marqué comme réussi.",
 
   "account_not_found": "Compte introuvable.",
   "insufficient_funds": "Solde insuffisant.",

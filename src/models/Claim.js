@@ -12,6 +12,11 @@ const claimSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     userFriendlyId: { type: String, index: true },
 
+    // The non-successful payment this claim refers to. Required at creation —
+    // a claim cannot exist without a matching pending/failed/cancelled payment.
+    paymentObjectId: { type: Schema.Types.ObjectId, ref: 'Payment', required: true, index: true },
+    paymentId: { type: String, required: true, index: true }, // friendly id snapshot
+
     amount: { type: Number, required: true, min: 0 },
     currencyCode: { type: String, default: 'XAF', uppercase: true },
     description: { type: String, trim: true },

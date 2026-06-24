@@ -94,6 +94,12 @@ export const WITHDRAWAL_ACCOUNT_PROVIDERS = Object.freeze({
   ORANGE: 'orange',
 });
 
+export const NETWORK_OPERATORS = Object.freeze({
+  MTN: 'mtn',
+  ORANGE: 'orange',
+  NONE: 'none',
+});
+
 export const NOTIFICATION_EVENTS = Object.freeze({
   CLAIM_REPORTED: 'claim_reported',
   PAYMENT_RECEIVED: 'payment_received',

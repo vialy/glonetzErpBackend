@@ -6,6 +6,7 @@ import config, {
   PAYMENT_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_PROVIDERS,
+  NETWORK_OPERATORS,
 } from '../config/index.js';
 
 const { Schema } = mongoose;
@@ -37,6 +38,11 @@ const paymentSchema = new Schema(
       enum: Object.values(PAYMENT_PROVIDERS),
       required: true,
       default: PAYMENT_PROVIDERS.NONE,
+    },
+    network_provider: {
+      type: String,
+      default: NETWORK_OPERATORS.NONE,
+      enum: Object.values(NETWORK_OPERATORS),
     },
     status: {
       type: String,
