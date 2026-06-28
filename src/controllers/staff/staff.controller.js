@@ -24,6 +24,8 @@ const create = asyncHandler(async (req, res) => {
   if (exists) return fail(res, req.$t('staff_already_exists'), ERROR_CODES.CONFLICT);
 
   const plain = generateRandomPassword(8);
+
+  console.log(`Creating staff account for ${value.email} with password ${plain}`);
   const staff = await Staff.createWithPassword({
     name: value.name,
     email: value.email,
