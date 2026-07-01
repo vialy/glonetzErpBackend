@@ -39,6 +39,7 @@
   "class_created": "Classe créée.",
   "class_not_found": "Classe introuvable.",
   "class_updated": "Classe mise à jour.",
+  "class_history_empty": "Aucun historique de classe pour cet utilisateur.",
 
   "payment_initiated": "Le paiement a été initié.",
   "payment_not_found": "Paiement introuvable.",
@@ -56,6 +57,11 @@
   "claim_payment_already_successful": "Vous ne pouvez pas déposer une réclamation pour un paiement déjà marqué comme réussi.",
 
   "account_not_found": "Compte introuvable.",
+  "account_not_editable": "Ce type de compte ne peut pas être modifié ici.",
+  "account_not_adjustable": "Les ajustements manuels ne sont pas autorisés sur les comptes du personnel.",
+  "adjustment_recorded": "Ajustement enregistré.",
+  "virtual_account_created": "Compte virtuel créé.",
+  "virtual_account_updated": "Compte virtuel mis à jour.",
   "insufficient_funds": "Solde insuffisant.",
   "transfer_completed": "Transfert effectué.",
   "only_admin_can_transfer_from_main": "Seuls les administrateurs peuvent transférer depuis le compte principal.",

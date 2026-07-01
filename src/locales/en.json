@@ -39,6 +39,7 @@
   "class_created": "Class created.",
   "class_not_found": "Class not found.",
   "class_updated": "Class updated.",
+  "class_history_empty": "No class history for this user yet.",
 
   "payment_initiated": "Payment has been initiated.",
   "payment_not_found": "Payment not found.",
@@ -56,6 +57,11 @@
   "claim_payment_already_successful": "You cannot raise a claim against a payment that is already marked as successful.",
 
   "account_not_found": "Account not found.",
+  "account_not_editable": "This account type cannot be edited here.",
+  "account_not_adjustable": "Manual adjustments are not allowed on staff accounts.",
+  "adjustment_recorded": "Adjustment recorded.",
+  "virtual_account_created": "Virtual account created.",
+  "virtual_account_updated": "Virtual account updated.",
   "insufficient_funds": "Insufficient funds.",
   "transfer_completed": "Transfer completed.",
   "only_admin_can_transfer_from_main": "Only administrators can transfer from the main account.",

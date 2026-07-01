@@ -50,7 +50,53 @@ const statement = asyncHandler(async (req, res) => {
   return ok(res, { account, ...result });
 });
 
-/** Admin-only — list every account (company + staff). */
+/**
+ * Admin-only totals dashboard.
+ *
+ * One aggregation query groups every active account by `type` and returns
+ * the sum of balances per group. Three rolled-up figures matter to the
+ * proprietor:
+ *
+ *   - companyBalance      — the system account (type: 'company') only.
+ *   - operationalBalance  — company + staff (funds we could actively move
+ *                            through: sitting in Neero or already in a
+ *                            manager's balance).
+ *   - totalBalance        — company + staff + virtual (everything under
+ *                            book-keeping, including bank / cash / wallet
+ *                            virtual accounts).
+ *
+ * `perType` exposes the raw group values so the frontend can render a
+ * breakdown without another round-trip.
+ */
+const totals = asyncHandler(async (req, res) => {
+  const agg = await Account.aggregate([
+    { $match: { isActive: true } },
+    { $group: { _id: '$type', total: { $sum: '$balance' }, count: { $sum: 1 } } },
+  ]);
+
+  const perType = { company: 0, staff: 0, virtual: 0 };
+  const counts = { company: 0, staff: 0, virtual: 0 };
+  for (const row of agg) {
+    if (perType[row._id] !== undefined) {
+      perType[row._id] = row.total;
+      counts[row._id] = row.count;
+    }
+  }
+
+  const companyBalance = perType.company;
+  const operationalBalance = perType.company + perType.staff;
+  const totalBalance = perType.company + perType.staff + perType.virtual;
+
+  return ok(res, {
+    companyBalance,
+    operationalBalance,
+    totalBalance,
+    perType,
+    counts,
+  });
+});
+
+/** Admin-only — list every account (company + staff + virtual). */
 const listAll = asyncHandler(async (req, res) => {
   const { page, limit } = readPagination(req);
   const result = await Account.paginate({}, {
@@ -131,4 +177,118 @@ const transfer = asyncHandler(async (req, res) => {
   return ok(res, { ...result, message: req.$t('transfer_completed') });
 });
 
-export default { myAccount, statement, listAll, transfer };
+// ===== Virtual accounts (admin book-keeping) =====
+
+/**
+ * A virtual account is a pure book-keeping ledger — banks, personal wallets,
+ * cash boxes, etc. Only admin can create / modify these; every staff member
+ * can list them (they're part of the company's overall funds view).
+ *
+ * Balance changes flow through the standard adjust endpoint below, which
+ * writes an ADJUSTMENT transaction to the account's statement.
+ */
+const virtualCreateSchema = Joi.object({
+  name: Joi.string().min(1).max(120).required(),
+  description: Joi.string().allow('', null).max(500),
+  logoUrl: Joi.string().uri().allow('', null),
+  currencyCode: Joi.string().length(3).uppercase(),
+  balance: Joi.number().min(0).default(0),
+});
+
+const createVirtual = asyncHandler(async (req, res) => {
+  const value = await virtualCreateSchema.validateAsync(req.body);
+  const account = await Account.create({
+    type: 'virtual',
+    name: value.name,
+    description: value.description || undefined,
+    logoUrl: value.logoUrl || undefined,
+    currencyCode: value.currencyCode || undefined,
+    balance: value.balance,
+    createdByStaffId: req.staff._id,
+    isActive: true,
+  });
+  return ok(res, { account, message: req.$t('virtual_account_created') });
+});
+
+const virtualUpdateSchema = Joi.object({
+  name: Joi.string().min(1).max(120),
+  description: Joi.string().allow('', null).max(500),
+  logoUrl: Joi.string().uri().allow('', null),
+  isActive: Joi.boolean(),
+}).min(1);
+
+const updateVirtual = asyncHandler(async (req, res) => {
+  const value = await virtualUpdateSchema.validateAsync(req.body);
+  const account = await Account.findByFriendlyId(req.params.accountId);
+  if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
+  if (account.type !== 'virtual') {
+    return fail(res, req.$t('account_not_editable'), ERROR_CODES.FORBIDDEN);
+  }
+  Object.assign(account, value);
+  await account.save();
+  return ok(res, { account, message: req.$t('virtual_account_updated') });
+});
+
+const getOne = asyncHandler(async (req, res) => {
+  const account = await Account.findByFriendlyId(req.params.accountId)
+    .populate('ownerStaffId', 'staffId name email role');
+  if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
+  return ok(res, { account });
+});
+
+// ===== Manual credit / debit (admin) =====
+
+/**
+ * POST /staff/accounts/:accountId/adjust
+ *
+ * Admin-only manual credit or debit on any account (company or virtual).
+ * Used to mirror external events — e.g. when money is manually withdrawn
+ * from the Neero merchant balance, the admin logs a debit here so the
+ * internal ledger stays in sync.
+ *
+ * Body: { type: 'credit' | 'debit', amount, description }.
+ * A single ADJUSTMENT transaction is written to the account's statement.
+ */
+const adjustSchema = Joi.object({
+  type: Joi.string().valid('credit', 'debit').required(),
+  amount: Joi.number().min(1).required(),
+  description: Joi.string().min(1).max(500).required(),
+});
+
+const adjust = asyncHandler(async (req, res) => {
+  const value = await adjustSchema.validateAsync(req.body);
+  const account = await Account.findByFriendlyId(req.params.accountId);
+  if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
+  // Only allow adjustments on company + virtual accounts; staff accounts
+  // are managed via transfer/withdrawal/expense flows.
+  if (account.type === 'staff') {
+    return fail(res, req.$t('account_not_adjustable'), ERROR_CODES.FORBIDDEN);
+  }
+  try {
+    const { account: updated, transaction } = await accounting.manualAdjustment({
+      staffId: req.staff._id,
+      account,
+      type: value.type,
+      amount: value.amount,
+      description: value.description,
+    });
+    return ok(res, { account: updated, transaction, message: req.$t('adjustment_recorded') });
+  } catch (err) {
+    if (err.code === 'insufficient_funds') {
+      return fail(res, req.$t('insufficient_funds'), ERROR_CODES.INSUFFICIENT_FUNDS);
+    }
+    throw err;
+  }
+});
+
+export default {
+  myAccount,
+  statement,
+  totals,
+  listAll,
+  transfer,
+  createVirtual,
+  updateVirtual,
+  getOne,
+  adjust,
+};

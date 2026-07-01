@@ -251,6 +251,23 @@
           }
         },
         {
+          "name": "Class history for user",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/users/{{userFriendlyId}}/classes?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "users", "{{userFriendlyId}}", "classes"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            },
+            "description": "Every class this user has been enrolled in. The row with `isActive: true` is their current class; other rows are past classes with `leftAt` set when they were promoted out."
+          }
+        },
+        {
           "name": "Batch assign class",
           "request": {
             "method": "POST",
@@ -520,6 +537,15 @@
           }
         },
         {
+          "name": "Account totals (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/totals", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "totals"] },
+            "description": "Admin-only rolled-up balances across every active account.\n\n- `companyBalance`      = system account (type: 'company').\n- `operationalBalance`  = company + all staff accounts (funds actively movable through Neero / manager balances).\n- `totalBalance`        = company + staff + virtual (everything under book-keeping).\n\n`perType` and `counts` expose the raw group sums and counts for building a breakdown chart on the frontend."
+          }
+        },
+        {
           "name": "List all accounts (admin)",
           "request": {
             "method": "GET",
@@ -547,6 +573,88 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"beneficiaryStaffId\": \"{{beneficiaryStaffId}}\",\n  \"amount\": 10000,\n  \"fee\": 0,\n  \"description\": \"Monthly allocation\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get account by id (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/{{virtualAccountId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "{{virtualAccountId}}"] }
+          }
+        },
+        {
+          "name": "Create virtual account (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.account) pm.environment.set('virtualAccountId', r.data.account.accountId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/virtual", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "virtual"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ecobank operating\",\n  \"description\": \"Ecobank company operating account\",\n  \"logoUrl\": \"https://cdn.example.com/logos/ecobank.png\",\n  \"currencyCode\": \"XAF\",\n  \"balance\": 0\n}"
+            },
+            "description": "Admin-only. Creates a purely internal book-keeping account (bank, wallet, cash box, …). No external funding — balance changes are made via the Adjust endpoint. `name` is required; `logoUrl`, `description`, `currencyCode`, and starting `balance` are optional."
+          }
+        },
+        {
+          "name": "Update virtual account (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/virtual/{{virtualAccountId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "virtual", "{{virtualAccountId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ecobank operating (renamed)\",\n  \"description\": \"Updated description\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Manual adjustment — credit (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/{{virtualAccountId}}/adjust", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "{{virtualAccountId}}", "adjust"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"credit\",\n  \"amount\": 25000,\n  \"description\": \"Cash deposit from Ecobank counter\"\n}"
+            },
+            "description": "Admin-only. Manually credit or debit any company or virtual account. Writes one ADJUSTMENT transaction to the account's statement. Use `{{virtualAccountId}}` for virtual accounts or the company account's `accountId` (from `GET /accounts/me` as admin) to mirror external Neero withdrawals."
+          }
+        },
+        {
+          "name": "Manual adjustment — debit (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/accounts/{{virtualAccountId}}/adjust", "host": ["{{baseUrl}}"], "path": ["api", "staff", "accounts", "{{virtualAccountId}}", "adjust"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"debit\",\n  \"amount\": 15000,\n  \"description\": \"Manual Neero withdrawal — reconciled 2026-06-10\"\n}"
             }
           }
         }
@@ -971,6 +1079,23 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
             "url": { "raw": "{{baseUrl}}/api/users/my-class", "host": ["{{baseUrl}}"], "path": ["api", "users", "my-class"] }
+          }
+        },
+        {
+          "name": "My classes (history)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/my-classes?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "my-classes"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            },
+            "description": "Full class history for the logged-in user. `isActive: true` = current class."
           }
         },
         {

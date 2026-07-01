@@ -162,6 +162,7 @@ export const ID_PREFIXES = Object.freeze({
   withdrawal: 'WDR',
   withdrawalAccount: 'WDA',
   expense: 'EXP',
+  classEnrollment: 'ENR',
 });
 
 const config = {

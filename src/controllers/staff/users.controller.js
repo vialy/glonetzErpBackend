@@ -1,6 +1,6 @@
 import Joi from 'joi';
 
-import { User, Class } from '../../models/index.js';
+import { User, Class, ClassEnrollment } from '../../models/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { generateRandomPassword } from '../../utils/password.js';
 import emailService from '../../services/email.service.js';
@@ -38,6 +38,12 @@ const create = asyncHandler(async (req, res) => {
     classId: classDoc ? classDoc._id : undefined,
     createdByStaffId: req.staff._id,
   });
+
+  // Class history — record the enrollment so the user's class timeline
+  // starts here. No-op when no class was assigned at creation.
+  if (classDoc) {
+    await ClassEnrollment.enroll({ user, classDoc, staffId: req.staff._id });
+  }
 
   // Fire-and-forget: respond immediately, deliver credentials in the background.
   // SMS goes to the (now-required) phone; if an email is on file, send a copy
@@ -93,6 +99,24 @@ const getOne = asyncHandler(async (req, res) => {
   const user = await User.findOne({ userId: req.params.userId }).populate('classId');
   if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
   return ok(res, { user });
+});
+
+/**
+ * A user's class history — every enrollment they've had, active first.
+ * Staff-facing view; user-facing equivalent is GET /users/my-classes.
+ */
+const classHistory = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  const { page, limit } = readPagination(req);
+  const result = await ClassEnrollment.paginate(
+    { userId: user._id },
+    { page, limit, sort: { isActive: -1, joinedAt: -1 } }
+  );
+  return ok(res, {
+    user: { userId: user.userId, name: user.name, email: user.email, phone: user.phone },
+    ...result,
+  });
 });
 
 /**
@@ -193,6 +217,10 @@ const bulkCreate = asyncHandler(async (req, res) => {
         createdByStaffId: req.staff._id,
       });
 
+      if (classDoc) {
+        await ClassEnrollment.enroll({ user, classDoc, staffId: req.staff._id });
+      }
+
       // Credential delivery — fire-and-forget per channel. SMS always, email
       // copy when present. We do NOT await: a 500-row batch shouldn't sit
       // behind 500 sequential SMS round-trips. Failures are logged.
@@ -248,7 +276,20 @@ const batchAssignToClass = asyncHandler(async (req, res) => {
   if (users.length === 0) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
 
   await User.assignToClass(users.map((u) => u._id), cls._id);
-  return ok(res, { count: users.length, message: req.$t('users_batch_assigned') });
+
+  // Update class-history for every promoted user: close their previous
+  // active enrollment (if any) and open a new one on the target class.
+  // Errors on individual users don't block the rest of the batch.
+  const results = await Promise.allSettled(
+    users.map((u) => ClassEnrollment.enroll({ user: u, classDoc: cls, staffId: req.staff._id }))
+  );
+  const enrolled = results.filter((r) => r.status === 'fulfilled').length;
+
+  return ok(res, {
+    count: users.length,
+    enrolled,
+    message: req.$t('users_batch_assigned'),
+  });
 });
 
 // `isActive` is intentionally NOT in the update schema — toggling account
@@ -330,6 +371,7 @@ export default {
   bulkCreate,
   list,
   getOne,
+  classHistory,
   batchAssignToClass,
   update,
   disable,

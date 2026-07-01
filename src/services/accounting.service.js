@@ -375,6 +375,59 @@ export async function refundCompanyDebitStaff({
  *
  * Errors with `insufficient_funds` if the account balance is below `amount`.
  */
+/**
+ * Manual credit / debit on any account. Used by the admin to mirror an
+ * external event (e.g. money manually removed from the Neero balance) or
+ * to reconcile a virtual (book-keeping) account.
+ *
+ * Produces one ADJUSTMENT transaction in the direction requested.
+ * `type` must be either 'credit' or 'debit'. On a debit, the applyDelta
+ * guard rejects with `insufficient_funds` if the account balance is too low.
+ */
+export async function manualAdjustment({
+  staffId,
+  account,
+  type, // 'credit' | 'debit'
+  amount,
+  description,
+}) {
+  const isCredit = type === 'credit';
+  const isDebit = type === 'debit';
+  if (!isCredit && !isDebit) {
+    const err = new Error('validation_error');
+    err.code = 'validation_error';
+    throw err;
+  }
+  if (amount <= 0) {
+    const err = new Error('validation_error');
+    err.code = 'validation_error';
+    throw err;
+  }
+
+  return withSession(async (session) => {
+    const sessOpt = session ? { session } : {};
+    const opening = account.balance;
+    const updated = await Account.applyDelta(account._id, isCredit ? amount : -amount, session);
+
+    const tx = new Transaction({
+      accountId: account._id,
+      accountFriendlyId: account.accountId,
+      userId: staffId,
+      type: isCredit ? TRANSACTION_TYPES.CREDIT : TRANSACTION_TYPES.DEBIT,
+      source: TRANSACTION_SOURCES.ADJUSTMENT,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode: account.currencyCode,
+      openingBalance: opening,
+      closingBalance: updated.balance,
+      description: description || (isCredit ? 'Manual credit' : 'Manual debit'),
+    });
+    await tx.save(sessOpt);
+    return { account: updated, transaction: tx };
+  });
+}
+
 export async function recordExpense({
   staffId,
   account,
@@ -414,4 +467,5 @@ export default {
   debitCompanyCreditStaff,
   refundCompanyDebitStaff,
   recordExpense,
+  manualAdjustment,
 };

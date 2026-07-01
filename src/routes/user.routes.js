@@ -35,6 +35,7 @@ router.use(enforcePasswordChange);
 
 router.get('/me', profile.me);
 router.get('/my-class', profile.myClass);
+router.get('/my-classes', profile.myClasses);
 
 router.get('/payments', payments.list);
 router.get('/payments/pending', payments.pending);

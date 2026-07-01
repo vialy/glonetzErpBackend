@@ -12,16 +12,23 @@ const accountSchema = new Schema(
 
     // Type: 'company' = the default account shared by all admins.
     //       'staff'   = a personal account tied to a single non-admin staff.
+    //       'virtual' = a book-keeping account (bank, wallet, cash box, ...)
+    //                   created and maintained by admin. Purely internal —
+    //                   no external funding flow, adjustments are recorded
+    //                   via POST /staff/accounts/:accountId/adjust.
     type: {
       type: String,
-      enum: ['company', 'staff'],
+      enum: ['company', 'staff', 'virtual'],
       required: true,
     },
     name: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    logoUrl: { type: String, trim: true }, // virtual accounts only
     currencyCode: { type: String, default: config.currency.default, uppercase: true },
     balance: { type: Number, default: 0, min: 0 },
 
-    ownerStaffId: { type: Schema.Types.ObjectId, ref: 'Staff', index: true }, // null for company account
+    ownerStaffId: { type: Schema.Types.ObjectId, ref: 'Staff', index: true }, // null for company / virtual
+    createdByStaffId: { type: Schema.Types.ObjectId, ref: 'Staff' },
     isDefault: { type: Boolean, default: false, index: true },
     isActive: { type: Boolean, default: true },
   },

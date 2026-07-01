@@ -29,6 +29,7 @@ router.post('/users', managerOrAbove(), users.create);
 router.post('/users/batch', managerOrAbove(), users.bulkCreate);
 router.get('/users', users.list);
 router.get('/users/:userId', users.getOne);
+router.get('/users/:userId/classes', users.classHistory);
 router.patch('/users/:userId', managerOrAbove(), users.update);
 router.patch('/users/:userId/disable', managerOrAbove(), users.disable);
 router.patch('/users/:userId/enable', managerOrAbove(), users.enable);
@@ -56,8 +57,19 @@ router.post('/claims/:claimId/resolve', managerOrAbove(), claims.resolve);
 // Accounts & transfers
 router.get('/accounts/me', accounts.myAccount);
 router.get('/accounts/statement', accounts.statement);
+router.get('/accounts/totals', adminOnly(), accounts.totals);
 router.get('/accounts', adminOnly(), accounts.listAll);
 router.post('/accounts/transfer', accounts.transfer);
+
+// Virtual (book-keeping) accounts — admin only for create/update.
+router.post('/accounts/virtual', adminOnly(), accounts.createVirtual);
+router.patch('/accounts/virtual/:accountId', adminOnly(), accounts.updateVirtual);
+
+// Manual credit / debit on any company or virtual account — admin only.
+router.post('/accounts/:accountId/adjust', adminOnly(), accounts.adjust);
+
+// Fetch a single account by friendly id — admin only (mirrors listAll access).
+router.get('/accounts/:accountId', adminOnly(), accounts.getOne);
 
 // Withdrawal accounts (mobile money / neero) — managed by non-admin staff.
 // The list endpoint is open to admin as well (with an optional ?staffId filter)
