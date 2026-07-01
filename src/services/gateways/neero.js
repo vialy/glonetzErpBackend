@@ -41,6 +41,11 @@ const PROVIDER_TO_NEERO = {
 const PROVIDER_TO_CASHOUT_TYPE = {
   mtn: 'MTN_MONEY_TRANSFER',
   orange: 'ORANGE_MONEY_TRANSFER',
+  // Neero account-to-account transfer. The exact paymentType for a NEERO
+  // destination depends on the merchant contract; "NEERO_TRANSFER" is used
+  // here and can be overridden via env NEERO_ACCOUNT_TRANSFER_TYPE if your
+  // Neero account uses a different value (e.g. NEERO_PERSON_TRANSFER).
+  neero: process.env.NEERO_ACCOUNT_TRANSFER_TYPE || 'NEERO_TRANSFER',
 };
 
 function authHeader() {
@@ -104,36 +109,56 @@ function extractIntent(obj) {
 }
 
 /**
- * Resolve the Neero payment method ID for a given phone + provider.
+ * Resolve the Neero payment method ID for a withdrawal/payment destination.
  *
- * Checks the local NeeroPaymentMethod cache first. If not found, creates
- * one via the Neero API and caches it before returning.
+ * All providers cache by (phoneNumber, provider). What differs is the body
+ * shape sent to Neero on cache miss:
  *
- * Returns { ok, paymentMethodId }.
+ *   mtn / orange  →  { type: 'MOBILE_MONEY',
+ *                       mobileMoneyDetails: { phoneNumber, countryIso, mobileMoneyProvider } }
+ *
+ *   neero         →  { type: 'NEERO_PERSON',
+ *                       personDetailsWithPhoneNumber: { countryCode, phoneNumber } }
+ *
+ * Cache miss → POST /api/v1/payment-methods, persist the response, return id.
+ * Returns { ok, paymentMethodId, fromCache } or { ok: false, error }.
  */
 async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM' }) {
   // Lazy-import to avoid circular dependencies at module load time
   const { default: NeeroPaymentMethod } = await import('../../models/NeeroPaymentMethod.js');
+
+  if (!phoneNumber) {
+    return { ok: false, error: 'phoneNumber is required to resolve a Neero payment method' };
+  }
 
   const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
   if (cached) {
     return { ok: true, paymentMethodId: cached.neeroPaymentMethodId, fromCache: true };
   }
 
-  const mobileMoneyProvider = PROVIDER_TO_NEERO[provider];
-  if (!mobileMoneyProvider) {
-    return { ok: false, error: `Unsupported mobile money provider: ${provider}` };
+  let body;
+  if (provider === 'neero') {
+    // Personal Neero account — Neero looks the account up by phone.
+    body = {
+      type: 'NEERO_PERSON',
+      personDetailsWithPhoneNumber: { countryCode: countryIso, phoneNumber },
+    };
+  } else {
+    const mobileMoneyProvider = PROVIDER_TO_NEERO[provider];
+    if (!mobileMoneyProvider) {
+      return { ok: false, error: `Unsupported provider: ${provider}` };
+    }
+    body = {
+      type: 'MOBILE_MONEY',
+      mobileMoneyDetails: { phoneNumber, countryIso, mobileMoneyProvider },
+    };
   }
 
   try {
-    const res = await client().post('/api/v1/payment-methods', {
-      type: 'MOBILE_MONEY',
-      mobileMoneyDetails: { phoneNumber, countryIso, mobileMoneyProvider },
-    });
+    const res = await client().post('/api/v1/payment-methods', body);
     const data = unwrap(res);
     const neeroPaymentMethodId = data.id || data.paymentMethodId;
 
-    // Persist to cache (upsert in case of race condition)
     await NeeroPaymentMethod.findOneAndUpdate(
       { phoneNumber, provider },
       { phoneNumber, provider, neeroPaymentMethodId, countryIso },
@@ -209,7 +234,18 @@ export async function initiatePayment({
 }
 
 /**
- * Cash-Out: merchant balance → manager's MoMo wallet.
+ * Cash-Out: merchant balance → destination wallet/account.
+ *
+ * Two destinations are supported:
+ *
+ *  - Mobile money (provider = 'mtn' | 'orange'):
+ *      phoneNumber is required. We resolve (or cache) the Neero MOBILE_MONEY
+ *      payment method id and target it.
+ *
+ *  - Neero account (provider = 'neero'):
+ *      neeroAccountId is required. It IS already a payment method id in
+ *      Neero's system, so we use it directly as destinationPaymentMethodId
+ *      and skip the /payment-methods round-trip.
  */
 export async function initiateWithdrawal({
   amount,
@@ -226,11 +262,14 @@ export async function initiateWithdrawal({
 
   const paymentType = PROVIDER_TO_CASHOUT_TYPE[provider];
   if (!paymentType) {
-    return { ok: false, error: `Unsupported mobile money provider: ${provider}` };
+    return { ok: false, error: `Unsupported withdrawal provider: ${provider}` };
   }
 
+  // Resolve destination payment method id — every provider hits the local
+  // (phoneNumber, provider) cache; on miss the right body shape is sent.
   const pm = await resolvePaymentMethodId({ phoneNumber, provider, countryIso });
   if (!pm.ok) return pm;
+  const destinationPaymentMethodId = pm.paymentMethodId;
 
   try {
     const res = await client().post('/api/v1/transaction-intents/cash-out', {
@@ -238,7 +277,7 @@ export async function initiateWithdrawal({
       currencyCode,
       paymentType,
       sourcePaymentMethodId: merchantPmId,
-      destinationPaymentMethodId: pm.paymentMethodId,
+      destinationPaymentMethodId,
       externalTransactionId: mchTransactionRef,
       confirm: true,
     });

@@ -2,12 +2,26 @@ import mongoose from 'mongoose';
 import mongoosePaginate from 'mongoose-paginate-v2';
 
 import { generateFriendlyId } from '../utils/idGenerator.js';
-import { WITHDRAWAL_ACCOUNT_PROVIDERS } from '../config/index.js';
+import {
+  WITHDRAWAL_ACCOUNT_PROVIDERS,
+  WITHDRAWAL_PROVIDERS_REQUIRING_OTP,
+} from '../config/index.js';
 
 const { Schema } = mongoose;
 
 const OTP_TTL_MINUTES = 10;
 
+/**
+ * A withdrawal target a staff member can pay out to.
+ *
+ * Every provider is keyed by phone number:
+ *  - MTN / Orange : mobile-money wallet → SMS-OTP verification required.
+ *  - Neero        : personal Neero account → trusted on creation (Neero has
+ *                   already KYC'd the underlying phone number).
+ *
+ * The provider-specific body shape sent to Neero when caching the payment
+ * method id lives in the Neero adapter.
+ */
 const withdrawalAccountSchema = new Schema(
   {
     withdrawalAccountId: { type: String, unique: true, index: true },
@@ -19,6 +33,7 @@ const withdrawalAccountSchema = new Schema(
       required: true,
     },
     phoneNumber: { type: String, required: true, trim: true },
+
     holderName: { type: String, trim: true },
     countryIso: { type: String, default: 'CM', uppercase: true },
 
@@ -35,6 +50,10 @@ withdrawalAccountSchema.pre('validate', function preValidate(next) {
     this.withdrawalAccountId = generateFriendlyId('withdrawalAccount');
   }
   next();
+});
+
+withdrawalAccountSchema.virtual('requiresOtp').get(function requiresOtp() {
+  return WITHDRAWAL_PROVIDERS_REQUIRING_OTP.includes(this.provider);
 });
 
 withdrawalAccountSchema.statics.findForStaff = function findForStaff(staffObjectId) {

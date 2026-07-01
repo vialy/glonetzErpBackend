@@ -187,7 +187,22 @@ async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
   if (verified.fees) withdrawal.gatewayFees = verified.fees;
   withdrawal.gatewayPayload = verified.raw;
 
+  // Withdrawals are now admin-initiated: company→staff was already credited at
+  // initiate time. The async branches here finish the ledger:
+  //   - successful → debit the staff so credit + debit net to zero
+  //   - failed     → debit the staff AND credit the company back
   if (status === 'successful') {
+    const account = await Account.findById(withdrawal.accountId);
+    if (account) {
+      await accounting.debitForWithdrawal({
+        staffId: withdrawal.staffId,
+        account,
+        amount: withdrawal.amount,
+        currencyCode: withdrawal.currencyCode,
+        withdrawalFriendlyId: withdrawal.withdrawalId,
+        description: `Cash-out ${withdrawal.withdrawalId} settled`,
+      });
+    }
     withdrawal.status = WITHDRAWAL_STATUSES.SUCCESSFUL;
     withdrawal.settledAt = new Date();
     withdrawal.gatewayCallback = raw;
@@ -196,11 +211,13 @@ async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
   }
 
   if (status === 'failed' || status === 'cancelled') {
-    const account = await Account.findById(withdrawal.accountId);
-    if (account) {
-      await accounting.refundWithdrawal({
-        staffId: withdrawal.staffId,
-        account,
+    const companyAccount = await Account.findDefaultCompany();
+    const staffAccount = await Account.findById(withdrawal.accountId);
+    if (companyAccount && staffAccount) {
+      await accounting.refundCompanyDebitStaff({
+        companyAccount,
+        beneficiaryStaffId: withdrawal.staffId,
+        beneficiaryAccount: staffAccount,
         amount: withdrawal.amount,
         currencyCode: withdrawal.currencyCode,
         withdrawalFriendlyId: withdrawal.withdrawalId,
@@ -213,7 +230,7 @@ async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
     await withdrawal.save();
     notifier.notify(NOTIFICATION_EVENTS.WITHDRAWAL_FAILED, {
       subject: `Withdrawal failed — ${withdrawal.withdrawalId}`,
-      body: `Withdrawal failed via callback. Funds refunded.`,
+      body: 'Withdrawal failed via callback. Staff balance debited and company balance restored.',
       meta: { withdrawalId: withdrawal.withdrawalId, status },
     });
     return ok(res, { acknowledged: true, refunded: true });

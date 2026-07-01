@@ -12,6 +12,7 @@ import accounts from '../controllers/staff/accounts.controller.js';
 import withdrawals from '../controllers/staff/withdrawals.controller.js';
 import staffMgmt from '../controllers/staff/staff.controller.js';
 import settings from '../controllers/staff/settings.controller.js';
+import expenses from '../controllers/staff/expenses.controller.js';
 
 const router = express.Router();
 
@@ -58,12 +59,24 @@ router.get('/accounts/statement', accounts.statement);
 router.get('/accounts', adminOnly(), accounts.listAll);
 router.post('/accounts/transfer', accounts.transfer);
 
-// Withdrawals (mobile money) — anyone except admin
-router.get('/withdrawal-accounts', forbidAdmin(), withdrawals.listWithdrawalAccounts);
+// Withdrawal accounts (mobile money / neero) — managed by non-admin staff.
+// The list endpoint is open to admin as well (with an optional ?staffId filter)
+// so admins can browse every staff member's accounts from one place.
+router.get('/withdrawal-accounts', withdrawals.listWithdrawalAccounts);
 router.post('/withdrawal-accounts', forbidAdmin(), withdrawals.addWithdrawalAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/verify', forbidAdmin(), withdrawals.verifyWithdrawalAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/resend-otp', forbidAdmin(), withdrawals.resendOtp);
-router.post('/withdrawals', forbidAdmin(), withdrawals.initiateWithdrawal);
+
+// Admin lists withdrawal accounts of a specific staff before initiating a payout.
+router.get('/staff/:staffId/withdrawal-accounts', adminOnly(), withdrawals.listForStaff);
+
+// Initiating a withdrawal is admin-only: company → staff (ledger) → MoMo/Neero (gateway).
+router.post('/withdrawals', adminOnly(), withdrawals.initiateWithdrawal);
+
+// Expenses — any staff records spend against their own account; admin sees all.
+router.post('/expenses', expenses.create);
+router.get('/expenses', expenses.list);
+router.get('/expenses/:expenseId', expenses.getOne);
 
 // Staff management — admin only
 router.post('/staff', adminOnly(), staffMgmt.create);

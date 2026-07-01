@@ -212,9 +212,206 @@ export async function refundWithdrawal({ staffId, account, amount, currencyCode,
   });
 }
 
+/**
+ * Atomic ledger half of an admin-initiated payout:
+ *  1. Debit the company (default) account by `amount`.
+ *  2. Credit the beneficiary staff's account by `amount`.
+ *
+ * Both transactions share the same `transferId` so they can be reconciled
+ * as a single event in the ledger. The actual gateway call (cash-out) is
+ * the caller's responsibility — this function only moves money internally.
+ *
+ * Returns { transferId, companyAccount, staffAccount, companyTx, staffTx }.
+ */
+export async function debitCompanyCreditStaff({
+  companyAccount,
+  beneficiaryStaffId,
+  beneficiaryAccount,
+  amount,
+  currencyCode,
+  description,
+  withdrawalFriendlyId,
+}) {
+  const transferFriendlyId = generateFriendlyId('transfer');
+
+  return withSession(async (session) => {
+    const sessOpt = session ? { session } : {};
+
+    const companyOpening = companyAccount.balance;
+    const companyDebited = await Account.applyDelta(companyAccount._id, -amount, session);
+
+    const staffOpening = beneficiaryAccount.balance;
+    const staffCredited = await Account.applyDelta(beneficiaryAccount._id, amount, session);
+
+    const companyTx = new Transaction({
+      accountId: companyAccount._id,
+      accountFriendlyId: companyAccount.accountId,
+      beneficiaryId: beneficiaryStaffId,
+      beneficiaryAccountId: beneficiaryAccount._id,
+      beneficiaryAccountFriendlyId: beneficiaryAccount.accountId,
+      type: TRANSACTION_TYPES.DEBIT,
+      source: TRANSACTION_SOURCES.WITHDRAWAL,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: companyOpening,
+      closingBalance: companyDebited.balance,
+      description: description || `Withdrawal funding ${withdrawalFriendlyId}`,
+      transferId: transferFriendlyId,
+      withdrawalFriendlyId,
+    });
+
+    const staffTx = new Transaction({
+      accountId: beneficiaryAccount._id,
+      accountFriendlyId: beneficiaryAccount.accountId,
+      userId: beneficiaryStaffId,
+      beneficiaryAccountId: companyAccount._id,
+      beneficiaryAccountFriendlyId: companyAccount.accountId,
+      type: TRANSACTION_TYPES.CREDIT,
+      source: TRANSACTION_SOURCES.WITHDRAWAL,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: staffOpening,
+      closingBalance: staffCredited.balance,
+      description: description || `Withdrawal funding ${withdrawalFriendlyId}`,
+      transferId: transferFriendlyId,
+      withdrawalFriendlyId,
+    });
+
+    await companyTx.save(sessOpt);
+    await staffTx.save(sessOpt);
+
+    return {
+      transferId: transferFriendlyId,
+      companyAccount: companyDebited,
+      staffAccount: staffCredited,
+      companyTx,
+      staffTx,
+    };
+  });
+}
+
+/**
+ * Reverse of `debitCompanyCreditStaff` — used when the gateway cash-out fails
+ * after we've already moved the money internally. Debits the staff account
+ * and credits the company account back by the same amount. Two ADJUSTMENT
+ * transactions share a fresh transferId.
+ */
+export async function refundCompanyDebitStaff({
+  companyAccount,
+  beneficiaryStaffId,
+  beneficiaryAccount,
+  amount,
+  currencyCode,
+  withdrawalFriendlyId,
+  reason,
+}) {
+  const transferFriendlyId = generateFriendlyId('transfer');
+
+  return withSession(async (session) => {
+    const sessOpt = session ? { session } : {};
+
+    const staffOpening = beneficiaryAccount.balance;
+    const staffDebited = await Account.applyDelta(beneficiaryAccount._id, -amount, session);
+
+    const companyOpening = companyAccount.balance;
+    const companyCredited = await Account.applyDelta(companyAccount._id, amount, session);
+
+    const staffTx = new Transaction({
+      accountId: beneficiaryAccount._id,
+      accountFriendlyId: beneficiaryAccount.accountId,
+      userId: beneficiaryStaffId,
+      type: TRANSACTION_TYPES.DEBIT,
+      source: TRANSACTION_SOURCES.ADJUSTMENT,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: staffOpening,
+      closingBalance: staffDebited.balance,
+      description: `Refund for failed withdrawal ${withdrawalFriendlyId}${reason ? ` — ${reason}` : ''}`,
+      transferId: transferFriendlyId,
+      withdrawalFriendlyId,
+    });
+
+    const companyTx = new Transaction({
+      accountId: companyAccount._id,
+      accountFriendlyId: companyAccount.accountId,
+      beneficiaryId: beneficiaryStaffId,
+      beneficiaryAccountId: beneficiaryAccount._id,
+      beneficiaryAccountFriendlyId: beneficiaryAccount.accountId,
+      type: TRANSACTION_TYPES.CREDIT,
+      source: TRANSACTION_SOURCES.ADJUSTMENT,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: companyOpening,
+      closingBalance: companyCredited.balance,
+      description: `Refund for failed withdrawal ${withdrawalFriendlyId}${reason ? ` — ${reason}` : ''}`,
+      transferId: transferFriendlyId,
+      withdrawalFriendlyId,
+    });
+
+    await staffTx.save(sessOpt);
+    await companyTx.save(sessOpt);
+
+    return {
+      transferId: transferFriendlyId,
+      companyAccount: companyCredited,
+      staffAccount: staffDebited,
+      companyTx,
+      staffTx,
+    };
+  });
+}
+
+/**
+ * Record an expense on a staff account. Debits the account and creates a
+ * single EXPENSE transaction so the spend shows up on the account statement.
+ *
+ * Errors with `insufficient_funds` if the account balance is below `amount`.
+ */
+export async function recordExpense({
+  staffId,
+  account,
+  amount,
+  currencyCode,
+  description,
+  expenseFriendlyId,
+}) {
+  return withSession(async (session) => {
+    const sessOpt = session ? { session } : {};
+    const opening = account.balance;
+    const debited = await Account.applyDelta(account._id, -amount, session);
+    const tx = new Transaction({
+      accountId: account._id,
+      accountFriendlyId: account.accountId,
+      userId: staffId,
+      type: TRANSACTION_TYPES.DEBIT,
+      source: TRANSACTION_SOURCES.EXPENSE,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: opening,
+      closingBalance: debited.balance,
+      description: description || `Expense ${expenseFriendlyId}`,
+    });
+    await tx.save(sessOpt);
+    return { account: debited, transaction: tx };
+  });
+}
+
 export default {
   creditCompanyForPayment,
   transfer,
   debitForWithdrawal,
   refundWithdrawal,
+  debitCompanyCreditStaff,
+  refundCompanyDebitStaff,
+  recordExpense,
 };

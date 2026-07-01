@@ -80,6 +80,7 @@ export const TRANSACTION_SOURCES = Object.freeze({
   PAYMENT: 'payment',
   TRANSFER: 'transfer',
   WITHDRAWAL: 'withdrawal',
+  EXPENSE: 'expense',
   ADJUSTMENT: 'adjustment',
 });
 
@@ -92,7 +93,24 @@ export const WITHDRAWAL_STATUSES = Object.freeze({
 export const WITHDRAWAL_ACCOUNT_PROVIDERS = Object.freeze({
   MTN: 'mtn',
   ORANGE: 'orange',
+  NEERO: 'neero',
 });
+
+/**
+ * Per-provider max per-transaction limit (XAF). Above the limit, the
+ * withdrawals controller rejects before calling the gateway. `0` (or
+ * absence) means no cap.
+ */
+export const WITHDRAWAL_LIMITS = Object.freeze({
+  mtn: 500_000,
+  orange: 400_000,
+  neero: 0, // unlimited
+});
+
+// Providers that require SMS-OTP verification before the account can be used.
+// Neero account IDs are issued through Neero's own KYC so we trust them
+// directly and skip the OTP loop.
+export const WITHDRAWAL_PROVIDERS_REQUIRING_OTP = Object.freeze(['mtn', 'orange']);
 
 export const NETWORK_OPERATORS = Object.freeze({
   MTN: 'mtn',
@@ -143,6 +161,7 @@ export const ID_PREFIXES = Object.freeze({
   account: 'ACC',
   withdrawal: 'WDR',
   withdrawalAccount: 'WDA',
+  expense: 'EXP',
 });
 
 const config = {
@@ -217,6 +236,13 @@ const config = {
       secretKey: env('NEERO_SECRET_KEY'),
       merchantPmId: env('NEERO_MERCHANT_PM_ID'),
       webhookSecret: env('NEERO_WEBHOOK_SECRET'),
+      // Merchant context used when creating a NEERO-type payment method
+      // (cash-out destination for neero withdrawal accounts).
+      storeId: env('NEERO_STORE_ID'),
+      balanceId: env('NEERO_BALANCE_ID'),
+      operatorId: env('NEERO_OPERATOR_ID')
+        ? parseInt(env('NEERO_OPERATOR_ID'), 10)
+        : undefined,
     },
   },
 
@@ -247,6 +273,8 @@ const config = {
   TRANSACTION_SOURCES,
   WITHDRAWAL_STATUSES,
   WITHDRAWAL_ACCOUNT_PROVIDERS,
+  WITHDRAWAL_LIMITS,
+  WITHDRAWAL_PROVIDERS_REQUIRING_OTP,
   NOTIFICATION_EVENTS,
   ERROR_CODES,
   ID_PREFIXES,

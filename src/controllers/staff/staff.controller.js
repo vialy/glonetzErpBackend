@@ -46,10 +46,12 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const list = asyncHandler(async (req, res) => {
-  const { q, role } = req.query;
+  const { q, role, email } = req.query;
   const { page, limit } = readPagination(req);
   const filter = {};
   if (role) filter.role = Number(role);
+  // Dedicated email filter — case-insensitive exact match. Use ?q= for substring search.
+  if (email) filter.email = String(email).toLowerCase().trim();
   if (q) {
     filter.$or = [
       { name: { $regex: q, $options: 'i' } },

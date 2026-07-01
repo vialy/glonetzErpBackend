@@ -62,11 +62,17 @@
   "admin_cannot_withdraw": "Les administrateurs ne peuvent pas retirer de fonds vers un compte mobile money.",
 
   "withdrawal_account_added": "Compte de retrait ajouté. Vérifiez avec l'OTP que nous vous avons envoyé.",
+  "withdrawal_account_added_neero": "Compte de retrait Neero ajouté.",
   "withdrawal_account_verified": "Compte de retrait vérifié.",
   "withdrawal_account_not_found": "Compte de retrait introuvable.",
   "withdrawal_account_not_verified": "Ce compte de retrait n'est pas vérifié.",
+  "withdrawal_account_otp_not_applicable": "La vérification OTP ne s'applique pas à ce type de compte.",
+  "withdrawal_account_phone_required": "Le numéro de téléphone est requis.",
   "withdrawal_initiated": "Le retrait a été initié.",
   "withdrawal_failed": "Le retrait a échoué.",
+  "withdrawal_exceeds_limit": "Le montant dépasse la limite par transaction pour ce fournisseur.",
+  "expense_recorded": "Dépense enregistrée.",
+  "expense_not_found": "Dépense introuvable.",
 
   "otp_invalid": "L'OTP saisi est invalide.",
   "otp_expired": "L'OTP a expiré. Veuillez en demander un nouveau.",

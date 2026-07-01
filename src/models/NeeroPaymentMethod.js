@@ -5,16 +5,19 @@ const { Schema } = mongoose;
 /**
  * Local cache of Neero payment method IDs.
  *
- * Before making a cash-in or cash-out call, we check this collection first.
- * If the (phoneNumber, provider) pair exists, we reuse the stored Neero
- * payment method ID instead of calling POST /api/v1/payment-methods again.
+ * Keyed by (phoneNumber, provider). Every withdrawal account ultimately
+ * maps to a phone number — for mtn/orange that's the mobile-money wallet,
+ * for neero that's the phone tied to the personal Neero account.
  *
- * This eliminates one round-trip per transaction for repeat customers/staff.
+ * Before calling cash-in / cash-out, the gateway adapter resolves the
+ * destination payment-method id through this cache; on miss it hits Neero's
+ * `/api/v1/payment-methods` endpoint (with provider-specific body shape)
+ * and persists the response so subsequent payouts skip the round-trip.
  */
 const neeroPaymentMethodSchema = new Schema(
   {
     phoneNumber: { type: String, required: true, trim: true },
-    provider: { type: String, required: true, lowercase: true, trim: true }, // 'mtn' | 'orange'
+    provider: { type: String, required: true, lowercase: true, trim: true }, // 'mtn' | 'orange' | 'neero'
     countryIso: { type: String, default: 'CM', uppercase: true },
     neeroPaymentMethodId: { type: String, required: true },
   },

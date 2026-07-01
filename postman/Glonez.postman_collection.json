@@ -566,13 +566,15 @@
               "path": ["api", "staff", "withdrawal-accounts"],
               "query": [
                 { "key": "pageNum", "value": "1" },
-                { "key": "pageSize", "value": "10" }
+                { "key": "pageSize", "value": "10" },
+                { "key": "staffId", "value": "{{beneficiaryStaffId}}", "disabled": true, "description": "Admin-only filter (friendly id, e.g. STF-XXXXXXXX). Ignored when called by non-admin." }
               ]
-            }
+            },
+            "description": "Non-admin staff see only their own withdrawal accounts. Admin sees all and can narrow by `?staffId=STF-XXXXXXXX`."
           }
         },
         {
-          "name": "Add withdrawal account",
+          "name": "Add withdrawal account (MTN/Orange — OTP)",
           "event": [
             {
               "listen": "test",
@@ -595,7 +597,36 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"provider\": \"mtn\",\n  \"phoneNumber\": \"{{devTestPhone}}\",\n  \"holderName\": \"Owner Name\"\n}"
+            },
+            "description": "MTN/Orange accounts require SMS-OTP verification. After creating, call Verify with the OTP."
+          }
+        },
+        {
+          "name": "Add withdrawal account (Neero — no OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.withdrawalAccount) pm.environment.set('withdrawalAccountId', r.data.withdrawalAccount.withdrawalAccountId);"
+                ]
+              }
             }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawal-accounts", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawal-accounts"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"neero\",\n  \"phoneNumber\": \"+237678727139\",\n  \"holderName\": \"Owner Name\"\n}"
+            },
+            "description": "Personal Neero account, identified by the phone number tied to it. Neero has already KYC'd the underlying account, so we trust it on creation — no OTP loop.\n\nIn production, adding the account also warms the local NeeroPaymentMethod cache: the server calls Neero's `POST /api/v1/payment-methods` with `{ type: 'NEERO_PERSON', personDetailsWithPhoneNumber: { countryCode: 'CM', phoneNumber } }`. The returned payment-method id is cached so later cash-outs skip the round-trip. If Neero rejects, the WDA is NOT created (errorCode 3002)."
           }
         },
         {
@@ -619,7 +650,16 @@
           }
         },
         {
-          "name": "Initiate withdrawal (success)",
+          "name": "List staff's withdrawal accounts (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/staff/{{beneficiaryStaffId}}/withdrawal-accounts", "host": ["{{baseUrl}}"], "path": ["api", "staff", "staff", "{{beneficiaryStaffId}}", "withdrawal-accounts"] },
+            "description": "Admin-only — lists the target manager's withdrawal accounts so the admin can pick one before initiating a payout."
+          }
+        },
+        {
+          "name": "Initiate withdrawal (admin, success)",
           "event": [
             {
               "listen": "test",
@@ -637,13 +677,14 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{staffToken}}" },
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-simulate-outcome", "value": "success", "description": "Used by the in-process simulator outside production." }
+              { "key": "x-simulate-outcome", "value": "success", "description": "Simulator hint outside production." }
             ],
             "url": { "raw": "{{baseUrl}}/api/staff/withdrawals", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawals"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000\n}"
-            }
+              "raw": "{\n  \"beneficiaryStaffId\": \"{{beneficiaryStaffId}}\",\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000,\n  \"description\": \"Monthly payout\"\n}"
+            },
+            "description": "Admin-only. Performs three steps atomically per the spec:\n  1. Debit the default company account by `amount`.\n  2. Credit the beneficiary staff's account by `amount`.\n  3. Initiate the gateway cash-out to the chosen withdrawal account.\n\nOn synchronous success the staff is debited again so the ledger nets to zero (the credit + debit pair leaves a clear audit trail). On gateway failure both ledger legs are reversed.\n\nProvider limits (per transaction): MTN 500,000 — Orange 400,000 — Neero unlimited."
           }
         },
         {
@@ -658,8 +699,69 @@
             "url": { "raw": "{{baseUrl}}/api/staff/withdrawals", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawals"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000\n}"
+              "raw": "{\n  \"beneficiaryStaffId\": \"{{beneficiaryStaffId}}\",\n  \"withdrawalAccountId\": \"{{withdrawalAccountId}}\",\n  \"amount\": 5000\n}"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff › Expenses",
+      "item": [
+        {
+          "name": "Record expense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r && r.success && r.data && r.data.expense) pm.environment.set('expenseFriendlyId', r.data.expense.expenseId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/expenses", "host": ["{{baseUrl}}"], "path": ["api", "staff", "expenses"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500,\n  \"description\": \"Office supplies\"\n}"
+            },
+            "description": "Debits the caller's account by `amount` and adds an EXPENSE row to their statement. For non-admin staff the spend hits their personal account; for admin it hits the default company account."
+          }
+        },
+        {
+          "name": "List expenses",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/expenses?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "expenses"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "staffId", "value": "", "disabled": true, "description": "Admin only filter." },
+                { "key": "from", "value": "", "disabled": true },
+                { "key": "to", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Non-admin staff see only their own expenses; admin sees all and can filter by `staffId`."
+          }
+        },
+        {
+          "name": "Get expense",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/expenses/{{expenseFriendlyId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "expenses", "{{expenseFriendlyId}}"] }
           }
         }
       ]
@@ -706,10 +808,12 @@
               "query": [
                 { "key": "pageNum", "value": "1" },
                 { "key": "pageSize", "value": "10" },
-                { "key": "q", "value": "", "disabled": true },
+                { "key": "q", "value": "", "disabled": true, "description": "Substring search on name / email / staffId." },
+                { "key": "email", "value": "", "disabled": true, "description": "Exact (case-insensitive) email match." },
                 { "key": "role", "value": "", "disabled": true }
               ]
-            }
+            },
+            "description": "Use `?email=` for an exact (case-insensitive) match — handy when picking a beneficiary by email. Use `?q=` for fuzzy/substring search across name, email, and staffId."
           }
         },
         {

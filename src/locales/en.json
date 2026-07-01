@@ -62,11 +62,17 @@
   "admin_cannot_withdraw": "Administrators cannot withdraw funds to a mobile money account.",
 
   "withdrawal_account_added": "Withdrawal account added. Verify with the OTP we sent.",
+  "withdrawal_account_added_neero": "Neero withdrawal account added.",
   "withdrawal_account_verified": "Withdrawal account verified.",
   "withdrawal_account_not_found": "Withdrawal account not found.",
   "withdrawal_account_not_verified": "This withdrawal account is not verified.",
+  "withdrawal_account_otp_not_applicable": "OTP verification does not apply to this account type.",
+  "withdrawal_account_phone_required": "Phone number is required.",
   "withdrawal_initiated": "Withdrawal has been initiated.",
   "withdrawal_failed": "Withdrawal failed.",
+  "withdrawal_exceeds_limit": "The amount exceeds the per-transaction limit for this provider.",
+  "expense_recorded": "Expense recorded.",
+  "expense_not_found": "Expense not found.",
 
   "otp_invalid": "The OTP you entered is invalid.",
   "otp_expired": "The OTP has expired. Please request a new one.",
