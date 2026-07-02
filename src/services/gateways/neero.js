@@ -38,6 +38,23 @@ const PROVIDER_TO_NEERO = {
   orange: 'ORANGE_MONEY',
 };
 
+// Countries we recognise for MoMo / Neero. Extend as new markets come online.
+const COUNTRY_DIAL_CODES = { CM: '+237' };
+
+/**
+ * Remove the country dial-code prefix from a phone number when present.
+ * Neero's NEERO_PERSON body wants the local number only (e.g. "677123456")
+ * with the `countryCode` field carrying "CM" separately. If the input
+ * doesn't start with the expected prefix we leave it alone — some callers
+ * already normalize upstream.
+ */
+function stripCountryCode(phoneNumber, countryIso = 'CM') {
+  const code = COUNTRY_DIAL_CODES[countryIso];
+  const raw = String(phoneNumber || '').trim();
+  if (!code) return raw;
+  return raw.startsWith(code) ? raw.slice(code.length).replace(/^\s+/, '') : raw;
+}
+
 const PROVIDER_TO_CASHOUT_TYPE = {
   mtn: 'MTN_MONEY_TRANSFER',
   orange: 'ORANGE_MONEY_TRANSFER',
@@ -133,15 +150,24 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
 
   const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
   if (cached) {
-    return { ok: true, paymentMethodId: cached.neeroPaymentMethodId, fromCache: true };
+    return {
+      ok: true,
+      paymentMethodId: cached.neeroPaymentMethodId,
+      shortInfo: cached.shortInfo || null,
+      fromCache: true,
+    };
   }
 
   let body;
   if (provider === 'neero') {
-    // Personal Neero account — Neero looks the account up by phone.
+    // Personal Neero account. Strip the +237 (or other) prefix — Neero
+    // expects the local number in `phoneNumber` and the ISO in `countryCode`.
     body = {
       type: 'NEERO_PERSON',
-      personDetailsWithPhoneNumber: { countryCode: countryIso, phoneNumber },
+      personDetailsWithPhoneNumber: {
+        countryCode: countryIso,
+        phoneNumber: stripCountryCode(phoneNumber, countryIso),
+      },
     };
   } else {
     const mobileMoneyProvider = PROVIDER_TO_NEERO[provider];
@@ -158,14 +184,15 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     const res = await client().post('/api/v1/payment-methods', body);
     const data = unwrap(res);
     const neeroPaymentMethodId = data.id || data.paymentMethodId;
+    const shortInfo = data.shortInfo || null;
 
     await NeeroPaymentMethod.findOneAndUpdate(
       { phoneNumber, provider },
-      { phoneNumber, provider, neeroPaymentMethodId, countryIso },
+      { phoneNumber, provider, neeroPaymentMethodId, countryIso, shortInfo },
       { upsert: true, new: true }
     );
 
-    return { ok: true, paymentMethodId: neeroPaymentMethodId, fromCache: false };
+    return { ok: true, paymentMethodId: neeroPaymentMethodId, shortInfo, fromCache: false };
   } catch (err) {
     return { ok: false, error: errorPayload(err) };
   }

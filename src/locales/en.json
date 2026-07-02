@@ -69,6 +69,8 @@
 
   "withdrawal_account_added": "Withdrawal account added. Verify with the OTP we sent.",
   "withdrawal_account_added_neero": "Neero withdrawal account added.",
+  "neero_account_verified": "Neero account verified.",
+  "neero_account_verify_failed": "Could not verify this Neero account.",
   "withdrawal_account_verified": "Withdrawal account verified.",
   "withdrawal_account_not_found": "Withdrawal account not found.",
   "withdrawal_account_not_verified": "This withdrawal account is not verified.",

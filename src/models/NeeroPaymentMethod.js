@@ -20,6 +20,9 @@ const neeroPaymentMethodSchema = new Schema(
     provider: { type: String, required: true, lowercase: true, trim: true }, // 'mtn' | 'orange' | 'neero'
     countryIso: { type: String, default: 'CM', uppercase: true },
     neeroPaymentMethodId: { type: String, required: true },
+    // Masked display string Neero returns (e.g. "+237 **** 139" or
+    // "NM BID *****64e22"). Handy for confirming an account before use.
+    shortInfo: { type: String },
   },
   { timestamps: true }
 );

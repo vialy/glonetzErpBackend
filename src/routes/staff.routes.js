@@ -76,6 +76,10 @@ router.get('/accounts/:accountId', adminOnly(), accounts.getOne);
 // so admins can browse every staff member's accounts from one place.
 router.get('/withdrawal-accounts', withdrawals.listWithdrawalAccounts);
 router.post('/withdrawal-accounts', forbidAdmin(), withdrawals.addWithdrawalAccount);
+// Neero personal accounts skip OTP; this endpoint lets the staff pre-verify
+// the phone number resolves to a real Neero account before they submit the
+// Add request. No WDA is persisted here.
+router.post('/withdrawal-accounts/verify-neero', forbidAdmin(), withdrawals.verifyNeeroAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/verify', forbidAdmin(), withdrawals.verifyWithdrawalAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/resend-otp', forbidAdmin(), withdrawals.resendOtp);
 

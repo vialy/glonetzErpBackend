@@ -106,6 +106,74 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
   });
 });
 
+// ===== Pre-add verify for Neero accounts =====
+
+/**
+ * POST /staff/withdrawal-accounts/verify-neero
+ *
+ * A cheap "does this Neero account exist?" probe used by the frontend
+ * BEFORE the staff commits to adding the account. Neero personal accounts
+ * skip OTP, so this replaces the confirmation loop MTN/Orange get via SMS.
+ *
+ * Body: { phoneNumber } — full number, incl. country code (e.g. +237677123456).
+ *
+ * Behavior:
+ *   1. Strip the country dial-code — Neero expects the local number.
+ *   2. Call Neero's `/api/v1/payment-methods` with `type: NEERO_PERSON`.
+ *      (Goes through the local cache, so a repeated verify is free.)
+ *   3. Return only `{ id, shortInfo, phoneNumber }` to the frontend. Neero
+ *      doesn't echo the phone number back, so we add it in for display.
+ *
+ * NO WithdrawalAccount is persisted here — that happens in the follow-up
+ * POST /withdrawal-accounts request.
+ */
+const verifyNeeroSchema = Joi.object({
+  phoneNumber: Joi.string().min(6).max(30).required(),
+});
+
+const verifyNeeroAccount = asyncHandler(async (req, res) => {
+  const value = await verifyNeeroSchema.validateAsync(req.body);
+
+  if (!config.isProduction) {
+    // Outside production we don't reach Neero — the simulator handles real
+    // payouts, so we can't verify an account either. Return a stubbed
+    // response the frontend can key off during development.
+    return ok(res, {
+      neeroAccount: {
+        id: 'dev-stub-neero-id',
+        shortInfo: 'DEV STUB',
+        phoneNumber: value.phoneNumber,
+      },
+      message: req.$t('neero_account_verified'),
+      dev: true,
+    });
+  }
+
+  const neeroAdapter = gateways.getByName('neero');
+  if (!neeroAdapter || typeof neeroAdapter.resolvePaymentMethodId !== 'function') {
+    return fail(res, req.$t('gateway_unavailable'), ERROR_CODES.GATEWAY_UNAVAILABLE);
+  }
+  const pm = await neeroAdapter.resolvePaymentMethodId({
+    provider: 'neero',
+    phoneNumber: value.phoneNumber,
+  });
+  if (!pm.ok) {
+    return fail(
+      res,
+      req.$t('neero_account_verify_failed'),
+      ERROR_CODES.GATEWAY_ERROR
+    );
+  }
+  return ok(res, {
+    neeroAccount: {
+      id: pm.paymentMethodId,
+      shortInfo: pm.shortInfo,
+      phoneNumber: value.phoneNumber,
+    },
+    message: req.$t('neero_account_verified'),
+  });
+});
+
 const verifySchema = Joi.object({
   otp: Joi.string().length(6).pattern(/^\d+$/).required(),
 });
@@ -363,6 +431,7 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
 
 export default {
   addWithdrawalAccount,
+  verifyNeeroAccount,
   verifyWithdrawalAccount,
   resendOtp,
   listWithdrawalAccounts,

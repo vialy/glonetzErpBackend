@@ -710,6 +710,22 @@
           }
         },
         {
+          "name": "Verify Neero account (pre-add)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/staff/withdrawal-accounts/verify-neero", "host": ["{{baseUrl}}"], "path": ["api", "staff", "withdrawal-accounts", "verify-neero"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+237677123456\"\n}"
+            },
+            "description": "Neero personal accounts skip OTP — this endpoint lets the staff pre-verify a phone number resolves to a real Neero account before submitting the Add request.\n\nServer strips the country code prefix (e.g. `+237`) before calling Neero's `/api/v1/payment-methods` with `{ type: 'NEERO_PERSON', personDetailsWithPhoneNumber: { countryCode: 'CM', phoneNumber: <local> } }`.\n\nReturns `{ neeroAccount: { id, shortInfo, phoneNumber } }`. Neero doesn't echo the phone back, so the server adds it in. No WithdrawalAccount is persisted here; the payment-method cache is warmed so the subsequent Add call is a free lookup.\n\nOutside production the endpoint returns a `dev: true` stub."
+          }
+        },
+        {
           "name": "Add withdrawal account (Neero — no OTP)",
           "event": [
             {

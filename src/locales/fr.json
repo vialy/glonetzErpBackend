@@ -69,6 +69,8 @@
 
   "withdrawal_account_added": "Compte de retrait ajouté. Vérifiez avec l'OTP que nous vous avons envoyé.",
   "withdrawal_account_added_neero": "Compte de retrait Neero ajouté.",
+  "neero_account_verified": "Compte Neero vérifié.",
+  "neero_account_verify_failed": "Impossible de vérifier ce compte Neero.",
   "withdrawal_account_verified": "Compte de retrait vérifié.",
   "withdrawal_account_not_found": "Compte de retrait introuvable.",
   "withdrawal_account_not_verified": "Ce compte de retrait n'est pas vérifié.",
