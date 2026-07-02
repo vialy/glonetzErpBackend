@@ -16,19 +16,15 @@ import config from '../../config/index.js';
  *                  sourcePaymentMethodId, destinationPaymentMethodId (env merchant id),
  *                  externalTransactionId, confirm: true }
  *
- *   Cash-Out (manager withdrawal to MoMo):
+ *   Cash-Out (manager withdrawal):
  *     1. Check NeeroPaymentMethod cache → same flow.
  *     2. POST /api/v1/transaction-intents/cash-out
  *          body: { amount, currencyCode,
- *                  paymentType: "MTN_MONEY_TRANSFER" | "ORANGE_MONEY_TRANSFER",
+ *                  paymentType: "MTN_MONEY_TRANSFER" | "ORANGE_MONEY_TRANSFER"
+ *                             | "TRANSFER_TO_NEERO_PERSON" (compte Neero personnel),
  *                  sourcePaymentMethodId (env merchant id),
  *                  destinationPaymentMethodId,
  *                  externalTransactionId, confirm: true }
- *
- *   Verify:
- *     GET /api/v1/transaction-intents/:id
- *
- * Only MTN and Orange mobile money are supported (per spec).
  */
 
 const NAME = 'neero';
@@ -41,11 +37,8 @@ const PROVIDER_TO_NEERO = {
 const PROVIDER_TO_CASHOUT_TYPE = {
   mtn: 'MTN_MONEY_TRANSFER',
   orange: 'ORANGE_MONEY_TRANSFER',
-  // Neero account-to-account transfer. The exact paymentType for a NEERO
-  // destination depends on the merchant contract; "NEERO_TRANSFER" is used
-  // here and can be overridden via env NEERO_ACCOUNT_TRANSFER_TYPE if your
-  // Neero account uses a different value (e.g. NEERO_PERSON_TRANSFER).
-  neero: process.env.NEERO_ACCOUNT_TRANSFER_TYPE || 'NEERO_TRANSFER',
+  // Doc Neero + NeeroDriver.php : TRANSFER_TO_NEERO_PERSON pour NEERO_PERSON.
+  neero: process.env.NEERO_ACCOUNT_TRANSFER_TYPE || 'TRANSFER_TO_NEERO_PERSON',
 };
 
 function authHeader() {
@@ -295,6 +288,13 @@ export async function initiateWithdrawal({
       raw: data,
     };
   } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[neero] cash-out failed', {
+      paymentType,
+      amount,
+      provider,
+      error: errorPayload(err),
+    });
     return { ok: false, error: errorPayload(err) };
   }
 }

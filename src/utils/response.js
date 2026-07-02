@@ -1,4 +1,5 @@
 import { ERROR_CODES } from '../config/index.js';
+import { formatGatewayDetail } from './gateway-error.js';
 
 /**
  * Standard response envelope.
@@ -16,10 +17,10 @@ export function ok(res, data = {}) {
   });
 }
 
-export function fail(res, errorMsg, errorCode = ERROR_CODES.GENERIC) {
+export function fail(res, errorMsg, errorCode = ERROR_CODES.GENERIC, data = null) {
   return res.status(200).json({
     success: false,
-    data: null,
+    data,
     errorMsg: errorMsg || 'unknown_error',
     errorCode,
   });
@@ -63,7 +64,18 @@ function classifyError(err, $t) {
       user_email_or_phone_required: ERROR_CODES.VALIDATION,
     };
     const codeNum = knownMap[err.code] || ERROR_CODES.GENERIC;
-    return { errorCode: codeNum, errorMsg: t(err.code) || err.message || 'error' };
+    const baseMsg = t(err.code) || err.message || 'error';
+
+    if (err.code === 'gateway_error' && err.detail != null) {
+      const detail = formatGatewayDetail(err.detail);
+      return {
+        errorCode: codeNum,
+        errorMsg: detail ? `${baseMsg} (${detail})` : baseMsg,
+        data: { gatewayDetail: err.detail },
+      };
+    }
+
+    return { errorCode: codeNum, errorMsg: baseMsg };
   }
 
   return {
@@ -88,14 +100,20 @@ export function asyncHandler(fn) {
       return await fn(req, res, next);
     } catch (err) {
       const route = `${req.method} ${req.originalUrl || req.url}`;
-      // Log a single concise line plus the stack on a new line for grep-ability.
+      const detail = err && err.detail != null ? formatGatewayDetail(err.detail) : '';
       // eslint-disable-next-line no-console
-      console.error(`[handler-error] ${route} :: ${err && err.message}`);
+      console.error(
+        `[handler-error] ${route} :: ${err && err.message}${detail ? ` — ${detail}` : ''}`
+      );
+      if (err && err.detail != null) {
+        // eslint-disable-next-line no-console
+        console.error('[handler-error] gateway detail:', err.detail);
+      }
       // eslint-disable-next-line no-console
       if (err && err.stack) console.error(err.stack);
 
-      const { errorCode, errorMsg } = classifyError(err, req.$t);
-      return fail(res, errorMsg, errorCode);
+      const { errorCode, errorMsg, data } = classifyError(err, req.$t);
+      return fail(res, errorMsg, errorCode, data);
     }
   };
 }
