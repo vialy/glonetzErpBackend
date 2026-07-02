@@ -72,6 +72,7 @@
   "withdrawal_account_verified": "Withdrawal account verified.",
   "withdrawal_account_not_found": "Withdrawal account not found.",
   "withdrawal_account_not_verified": "This withdrawal account is not verified.",
+  "withdrawal_account_deactivated": "Withdrawal account deactivated. You can register a new one.",
   "withdrawal_account_otp_not_applicable": "OTP verification does not apply to this account type.",
   "withdrawal_account_phone_required": "Phone number is required.",
   "withdrawal_initiated": "Withdrawal has been initiated.",

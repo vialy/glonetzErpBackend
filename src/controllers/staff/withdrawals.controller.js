@@ -204,6 +204,19 @@ const listForStaff = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+const deactivateWithdrawalAccount = asyncHandler(async (req, res) => {
+  const account = await WithdrawalAccount.findOne({
+    withdrawalAccountId: req.params.withdrawalAccountId,
+    staffId: req.staff._id,
+    isActive: true,
+  });
+  if (!account) return fail(res, req.$t('withdrawal_account_not_found'), ERROR_CODES.NOT_FOUND);
+
+  account.isActive = false;
+  await account.save();
+  return ok(res, { message: req.$t('withdrawal_account_deactivated') });
+});
+
 // ===== Initiating a withdrawal (admin only) =====
 
 /**
@@ -367,5 +380,6 @@ export default {
   resendOtp,
   listWithdrawalAccounts,
   listForStaff,
+  deactivateWithdrawalAccount,
   initiateWithdrawal,
 };
