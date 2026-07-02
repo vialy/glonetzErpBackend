@@ -4,6 +4,7 @@ import { Expense, Account } from '../../models/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { readPagination } from '../../utils/pagination.js';
 import accounting from '../../services/accounting.service.js';
+import { publicUrlFor } from '../../middlewares/upload.js';
 import { ERROR_CODES, STAFF_ROLES } from '../../config/index.js';
 
 /**
@@ -27,9 +28,36 @@ async function resolveAccount(staff) {
   return account;
 }
 
+function buildDescription(value) {
+  if (value.description?.trim()) return value.description.trim();
+  const parts = [];
+  if (value.categoryLabel?.trim()) parts.push(value.categoryLabel.trim());
+  if (value.comment?.trim()) parts.push(value.comment.trim());
+  return parts.join(' — ') || 'Dépense';
+}
+
+function parseSpentAt(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const err = new Error('validation_error');
+    err.code = 'validation_error';
+    throw err;
+  }
+  return date;
+}
+
 const createSchema = Joi.object({
   amount: Joi.number().integer().min(1).required(),
-  description: Joi.string().min(1).max(500).required(),
+  spentAt: Joi.alternatives().try(Joi.date(), Joi.string()).required(),
+  description: Joi.string().max(500).allow('', null),
+  categoryId: Joi.string().max(80).allow('', null),
+  categoryLabel: Joi.string().max(200).allow('', null),
+  comment: Joi.string().max(1000).allow('', null),
+}).custom((value, helpers) => {
+  if (!value.description?.trim() && !value.categoryLabel?.trim()) {
+    return helpers.error('any.custom', { message: 'description_or_category_required' });
+  }
+  return value;
 });
 
 /**
@@ -38,6 +66,8 @@ const createSchema = Joi.object({
  */
 const create = asyncHandler(async (req, res) => {
   const value = await createSchema.validateAsync(req.body);
+  const spentAt = parseSpentAt(value.spentAt);
+  const description = buildDescription(value);
 
   const account = await resolveAccount(req.staff);
   if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
@@ -45,23 +75,33 @@ const create = asyncHandler(async (req, res) => {
     return fail(res, req.$t('insufficient_funds'), ERROR_CODES.INSUFFICIENT_FUNDS);
   }
 
-  // Pre-create so we have a friendly id to tie the ledger row to.
-  const expense = await Expense.create({
+  const expensePayload = {
     staffId: req.staff._id,
     accountId: account._id,
     accountFriendlyId: account.accountId,
     amount: value.amount,
     currencyCode: account.currencyCode,
-    description: value.description,
-  });
+    description,
+    spentAt,
+    categoryId: value.categoryId?.trim() || undefined,
+    categoryLabel: value.categoryLabel?.trim() || undefined,
+    comment: value.comment?.trim() || undefined,
+  };
+  if (req.file) {
+    expensePayload.proofUrl = publicUrlFor(req.file.filename);
+    expensePayload.proofFileName = req.file.originalname?.trim() || undefined;
+  }
+
+  const expense = await Expense.create(expensePayload);
 
   const { transaction } = await accounting.recordExpense({
     staffId: req.staff._id,
     account,
     amount: value.amount,
     currencyCode: account.currencyCode,
-    description: value.description,
+    description,
     expenseFriendlyId: expense.expenseId,
+    occurredAt: spentAt,
   });
 
   expense.transactionFriendlyId = transaction.transactionId;
@@ -70,9 +110,22 @@ const create = asyncHandler(async (req, res) => {
   return ok(res, { expense, transaction, message: req.$t('expense_recorded') });
 });
 
+function buildDateRangeFilter(from, to) {
+  const range = {};
+  if (from) range.$gte = new Date(from);
+  if (to) {
+    const end = new Date(to);
+    if (String(to).length <= 10) {
+      end.setHours(23, 59, 59, 999);
+    }
+    range.$lte = end;
+  }
+  return range;
+}
+
 /**
  * List expenses. Non-admin staff see only their own; admin sees all and can
- * filter by ?staffId= (friendly id), ?from / ?to.
+ * filter by ?staffId= (friendly id), ?from / ?to (on spentAt).
  */
 const list = asyncHandler(async (req, res) => {
   const { page, limit } = readPagination(req);
@@ -85,12 +138,14 @@ const list = asyncHandler(async (req, res) => {
     if (s) filter.staffId = s._id;
   }
   if (req.query.from || req.query.to) {
-    filter.createdAt = {};
-    if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
-    if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
+    const range = buildDateRangeFilter(req.query.from, req.query.to);
+    filter.$or = [
+      { spentAt: range },
+      { spentAt: { $exists: false }, createdAt: range },
+    ];
   }
   const result = await Expense.paginate(filter, {
-    page, limit, sort: '-createdAt',
+    page, limit, sort: { spentAt: -1, createdAt: -1 },
     populate: { path: 'staffId', select: 'staffId name email role' },
   });
   return ok(res, result);
@@ -100,7 +155,6 @@ const getOne = asyncHandler(async (req, res) => {
   const expense = await Expense.findByFriendlyId(req.params.expenseId)
     .populate('staffId', 'staffId name email role');
   if (!expense) return fail(res, req.$t('expense_not_found'), ERROR_CODES.NOT_FOUND);
-  // Non-admin staff can only see their own expenses
   if (req.staff.role !== STAFF_ROLES.ADMIN && !expense.staffId._id.equals(req.staff._id)) {
     return fail(res, req.$t('forbidden'), ERROR_CODES.FORBIDDEN);
   }

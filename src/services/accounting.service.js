@@ -435,6 +435,7 @@ export async function recordExpense({
   currencyCode,
   description,
   expenseFriendlyId,
+  occurredAt,
 }) {
   return withSession(async (session) => {
     const sessOpt = session ? { session } : {};
@@ -454,6 +455,10 @@ export async function recordExpense({
       closingBalance: debited.balance,
       description: description || `Expense ${expenseFriendlyId}`,
     });
+    if (occurredAt) {
+      tx.createdAt = occurredAt;
+      tx.updatedAt = occurredAt;
+    }
     await tx.save(sessOpt);
     return { account: debited, transaction: tx };
   });

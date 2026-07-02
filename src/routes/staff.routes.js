@@ -13,6 +13,7 @@ import withdrawals from '../controllers/staff/withdrawals.controller.js';
 import staffMgmt from '../controllers/staff/staff.controller.js';
 import settings from '../controllers/staff/settings.controller.js';
 import expenses from '../controllers/staff/expenses.controller.js';
+import { upload } from '../middlewares/upload.js';
 
 const router = express.Router();
 
@@ -86,7 +87,7 @@ router.get('/staff/:staffId/withdrawal-accounts', adminOnly(), withdrawals.listF
 router.post('/withdrawals', adminOnly(), withdrawals.initiateWithdrawal);
 
 // Expenses — any staff records spend against their own account; admin sees all.
-router.post('/expenses', expenses.create);
+router.post('/expenses', upload.single('proof'), expenses.create);
 router.get('/expenses', expenses.list);
 router.get('/expenses/:expenseId', expenses.getOne);
 

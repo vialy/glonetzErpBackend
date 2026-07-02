@@ -22,6 +22,16 @@ const expenseSchema = new Schema(
     currencyCode: { type: String, default: 'XAF', uppercase: true },
     description: { type: String, required: true, trim: true },
 
+    /** Date the spend actually occurred (may differ from createdAt). */
+    spentAt: { type: Date, required: true, index: true },
+    categoryId: { type: String, trim: true },
+    categoryLabel: { type: String, trim: true },
+    comment: { type: String, trim: true },
+
+    /** Optional receipt / proof image (same upload pipeline as claims). */
+    proofUrl: { type: String },
+    proofFileName: { type: String, trim: true },
+
     // Link back to the ledger transaction created for this expense
     transactionFriendlyId: { type: String, index: true },
   },
