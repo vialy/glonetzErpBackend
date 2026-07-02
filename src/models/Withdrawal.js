@@ -14,7 +14,13 @@ const withdrawalSchema = new Schema(
     accountId: { type: Schema.Types.ObjectId, ref: 'Account', required: true, index: true },
     withdrawalAccountId: { type: Schema.Types.ObjectId, ref: 'WithdrawalAccount', required: true },
 
+    /** Montant total envoyé au gateway (net + frais). */
     amount: { type: Number, required: true, min: 0 },
+    /** Montant net utilisable côté manager ERP après déduction des frais. */
+    netAmount: { type: Number, min: 0 },
+    /** Charge de retrait enregistrée comme dépense manager. */
+    feeAmount: { type: Number, min: 0, default: 0 },
+    expenseFriendlyId: { type: String, index: true },
     currencyCode: { type: String, default: 'XAF', uppercase: true },
     provider: { type: String, required: true }, // gateway provider used (e.g. neero)
 

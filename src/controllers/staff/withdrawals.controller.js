@@ -10,6 +10,7 @@ import accounting from '../../services/accounting.service.js';
 import gateways from '../../services/gateways/index.js';
 import notifier from '../../services/notification.service.js';
 import { fireAndForget } from '../../utils/fireAndForget.js';
+import { computeWithdrawalFee } from '../../utils/withdrawal-fees.js';
 import config, {
   ERROR_CODES,
   WITHDRAWAL_ACCOUNT_PROVIDERS,
@@ -103,6 +104,52 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
   return ok(res, {
     withdrawalAccount: account.toObject({ virtuals: true }),
     message: req.$t('withdrawal_account_added_neero'),
+  });
+});
+
+// ===== Pre-add verify for Neero accounts =====
+
+const verifyNeeroSchema = Joi.object({
+  phoneNumber: Joi.string().min(6).max(30).required(),
+});
+
+const verifyNeeroAccount = asyncHandler(async (req, res) => {
+  const value = await verifyNeeroSchema.validateAsync(req.body);
+
+  if (!config.isProduction) {
+    return ok(res, {
+      neeroAccount: {
+        id: 'dev-stub-neero-id',
+        shortInfo: 'DEV STUB',
+        phoneNumber: value.phoneNumber,
+      },
+      message: req.$t('neero_account_verified'),
+      dev: true,
+    });
+  }
+
+  const neeroAdapter = gateways.getByName('neero');
+  if (!neeroAdapter || typeof neeroAdapter.resolvePaymentMethodId !== 'function') {
+    return fail(res, req.$t('gateway_unavailable'), ERROR_CODES.GATEWAY_UNAVAILABLE);
+  }
+  const pm = await neeroAdapter.resolvePaymentMethodId({
+    provider: 'neero',
+    phoneNumber: value.phoneNumber,
+  });
+  if (!pm.ok) {
+    return fail(
+      res,
+      req.$t('neero_account_verify_failed'),
+      ERROR_CODES.GATEWAY_ERROR
+    );
+  }
+  return ok(res, {
+    neeroAccount: {
+      id: pm.paymentMethodId,
+      shortInfo: pm.shortInfo,
+      phoneNumber: value.phoneNumber,
+    },
+    message: req.$t('neero_account_verified'),
   });
 });
 
@@ -204,43 +251,25 @@ const listForStaff = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-const deactivateWithdrawalAccount = asyncHandler(async (req, res) => {
-  const account = await WithdrawalAccount.findOne({
-    withdrawalAccountId: req.params.withdrawalAccountId,
-    staffId: req.staff._id,
-    isActive: true,
-  });
-  if (!account) return fail(res, req.$t('withdrawal_account_not_found'), ERROR_CODES.NOT_FOUND);
-
-  account.isActive = false;
-  await account.save();
-  return ok(res, { message: req.$t('withdrawal_account_deactivated') });
-});
-
 // ===== Initiating a withdrawal (admin only) =====
 
 /**
- * Admin-only payout flow. Three ledger movements happen up front in a single
- * Mongo transaction:
+ * Admin-only payout flow. Ledger movements:
  *
- *   1. Debit the company (default) account by `amount`.
- *   2. Credit the beneficiary staff's account by `amount`.
+ *   1. Debit the company account by `netAmount + fee`.
+ *   2. Credit the beneficiary staff's account by the same total.
  *   3. Create the Withdrawal record (status PENDING).
+ *   4. Call the gateway for `netAmount + fee` (Neero/MoMo).
+ *   5. On success: record a manager expense for `fee` so the ERP balance
+ *      stays at `netAmount`. On failure: reverse steps 1 + 2.
  *
- * Then we call the gateway to actually move the money to the staff's
- * mobile-money / neero account. If the gateway succeeds the staff balance
- * is debited again by the same `amount` so the staff's net effect is zero
- * (the money flowed through them — it's recorded for traceability per the
- * proprietor's request). If the gateway fails, `refundCompanyDebitStaff`
- * reverses steps 1 + 2.
- *
- * Limits per provider (config/WITHDRAWAL_LIMITS): MTN 500k, Orange 400k,
- * Neero unlimited. Reject before touching the ledger if exceeded.
+ * `netAmount` is what the manager can use on ERP after fees.
+ * Limits per provider apply to the total sent to the gateway.
  */
 const withdrawSchema = Joi.object({
   beneficiaryStaffId: Joi.string().required(), // friendly staff id
   withdrawalAccountId: Joi.string().required(), // friendly id of the staff's WDA
-  amount: Joi.number().integer().min(1).required(),
+  netAmount: Joi.number().integer().min(1).required(),
   description: Joi.string().allow('', null),
 });
 
@@ -263,12 +292,16 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
   if (!wa) return fail(res, req.$t('withdrawal_account_not_found'), ERROR_CODES.NOT_FOUND);
   if (!wa.isVerified) return fail(res, req.$t('withdrawal_account_not_verified'), ERROR_CODES.FORBIDDEN);
 
-  // Provider-specific cap (0 means unlimited)
+  const netAmount = value.netAmount;
+  const feeAmount = computeWithdrawalFee(netAmount);
+  const totalAmount = netAmount + feeAmount;
+
+  // Provider-specific cap (0 means unlimited) — applies to gateway total
   const cap = WITHDRAWAL_LIMITS[wa.provider] || 0;
-  if (cap > 0 && value.amount > cap) {
+  if (cap > 0 && totalAmount > cap) {
     return fail(
       res,
-      `${req.$t('withdrawal_exceeds_limit')} (${cap.toLocaleString()} ${value.amount})`,
+      `${req.$t('withdrawal_exceeds_limit')} (${cap.toLocaleString()} ${totalAmount})`,
       ERROR_CODES.VALIDATION
     );
   }
@@ -276,7 +309,7 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
   // Resolve the two accounts involved
   const companyAccount = await Account.findDefaultCompany();
   if (!companyAccount) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
-  if (companyAccount.balance < value.amount) {
+  if (companyAccount.balance < totalAmount) {
     return fail(res, req.$t('insufficient_funds'), ERROR_CODES.INSUFFICIENT_FUNDS);
   }
 
@@ -295,30 +328,29 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
     staffId: beneficiary._id,
     accountId: beneficiaryAccount._id,
     withdrawalAccountId: wa._id,
-    amount: value.amount,
+    amount: totalAmount,
+    netAmount,
+    feeAmount,
     currencyCode: companyAccount.currencyCode,
     provider: 'pending',
     status: WITHDRAWAL_STATUSES.PENDING,
   });
 
-  // Step 1 + 2 — atomic ledger move (company → staff). Step "3" of the
-  // proprietor's spec — debit the staff back to net zero — happens after
-  // the gateway confirms success (so the staff visibly retains the credit
-  // until the cash leaves the merchant balance).
+  // Step 1 + 2 — atomic ledger move (company → staff).
   await accounting.debitCompanyCreditStaff({
     companyAccount,
     beneficiaryStaffId: beneficiary._id,
     beneficiaryAccount,
-    amount: value.amount,
+    amount: totalAmount,
     currencyCode: companyAccount.currencyCode,
     description: value.description || `Withdrawal ${withdrawal.withdrawalId} → ${wa.provider}`,
     withdrawalFriendlyId: withdrawal.withdrawalId,
   });
 
-  // Step 3 — fire the actual cash-out via the active gateway
+  // Step 3 — fire the actual cash-out via the active gateway (total = net + fee)
   try {
     const { adapter, result } = await gateways.initiateWithdrawalViaActive({
-      amount: value.amount,
+      amount: totalAmount,
       currencyCode: companyAccount.currencyCode,
       phoneNumber: wa.phoneNumber,
       provider: wa.provider,
@@ -336,19 +368,21 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
     if (result.status === 'successful') {
       withdrawal.status = WITHDRAWAL_STATUSES.SUCCESSFUL;
       withdrawal.settledAt = new Date();
-      // Debit the staff so the credit + debit net to zero on their statement.
       const refreshed = await Account.findById(beneficiaryAccount._id);
-      await accounting.debitForWithdrawal({
+      await accounting.settleAdminWithdrawal({
+        withdrawal,
         staffId: beneficiary._id,
         account: refreshed,
-        amount: value.amount,
-        currencyCode: refreshed.currencyCode,
-        withdrawalFriendlyId: withdrawal.withdrawalId,
-        description: `Cash-out ${withdrawal.withdrawalId} settled`,
       });
     }
     await withdrawal.save();
-    return ok(res, { withdrawal, message: req.$t('withdrawal_initiated') });
+    return ok(res, {
+      withdrawal,
+      netAmount,
+      feeAmount,
+      totalAmount,
+      message: req.$t('withdrawal_initiated'),
+    });
   } catch (err) {
     // Gateway failed → reverse the staff credit AND the company debit.
     const refreshedCompany = await Account.findById(companyAccount._id);
@@ -357,7 +391,7 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
       companyAccount: refreshedCompany,
       beneficiaryStaffId: beneficiary._id,
       beneficiaryAccount: refreshedStaff,
-      amount: value.amount,
+      amount: totalAmount,
       currencyCode: refreshedCompany.currencyCode,
       withdrawalFriendlyId: withdrawal.withdrawalId,
       reason: err.detail ? JSON.stringify(err.detail) : err.message,
@@ -376,10 +410,10 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
 
 export default {
   addWithdrawalAccount,
+  verifyNeeroAccount,
   verifyWithdrawalAccount,
   resendOtp,
   listWithdrawalAccounts,
   listForStaff,
-  deactivateWithdrawalAccount,
   initiateWithdrawal,
 };

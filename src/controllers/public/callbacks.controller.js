@@ -187,20 +187,17 @@ async function handleWithdrawalCallback({ res, adapter, withdrawal, raw }) {
   if (verified.fees) withdrawal.gatewayFees = verified.fees;
   withdrawal.gatewayPayload = verified.raw;
 
-  // Withdrawals are now admin-initiated: company→staff was already credited at
+  // Withdrawals are admin-initiated: company→staff was already credited at
   // initiate time. The async branches here finish the ledger:
-  //   - successful → debit the staff so credit + debit net to zero
-  //   - failed     → debit the staff AND credit the company back
+  //   - successful → fee expense (allocation) or staff debit (legacy)
+  //   - failed     → refund company + staff
   if (status === 'successful') {
     const account = await Account.findById(withdrawal.accountId);
     if (account) {
-      await accounting.debitForWithdrawal({
+      await accounting.settleAdminWithdrawal({
+        withdrawal,
         staffId: withdrawal.staffId,
         account,
-        amount: withdrawal.amount,
-        currencyCode: withdrawal.currencyCode,
-        withdrawalFriendlyId: withdrawal.withdrawalId,
-        description: `Cash-out ${withdrawal.withdrawalId} settled`,
       });
     }
     withdrawal.status = WITHDRAWAL_STATUSES.SUCCESSFUL;

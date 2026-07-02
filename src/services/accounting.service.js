@@ -464,6 +464,76 @@ export async function recordExpense({
   });
 }
 
+/**
+ * Finalise un retrait admin après succès gateway uniquement.
+ * La dépense de frais manager n'est créée que lorsque le paiement est confirmé.
+ * - Avec frais (allocation manager) : enregistre la charge comme dépense ;
+ *   le solde ERP manager reste à netAmount (crédit total − frais).
+ * - Sans frais (legacy) : débite le staff du montant total (pass-through, net 0).
+ */
+export async function settleAdminWithdrawal({
+  withdrawal,
+  staffId,
+  account,
+}) {
+  const feeAmount = Number(withdrawal.feeAmount) || 0;
+
+  if (feeAmount > 0) {
+    if (withdrawal.expenseFriendlyId) {
+      return { alreadySettled: true };
+    }
+
+    const { Expense } = await import('../models/index.js');
+    const description = `Frais de retrait — ${withdrawal.withdrawalId}`;
+    const spentAt = new Date();
+
+    const expense = await Expense.create({
+      staffId,
+      accountId: account._id,
+      accountFriendlyId: account.accountId,
+      amount: feeAmount,
+      currencyCode: withdrawal.currencyCode || account.currencyCode,
+      description,
+      spentAt,
+      categoryId: 'withdrawal_fee',
+      categoryLabel: 'Frais de retrait',
+      comment: withdrawal.netAmount
+        ? `Allocation nette ${withdrawal.netAmount.toLocaleString()} ${withdrawal.currencyCode || 'XAF'}`
+        : undefined,
+    });
+
+    const refreshed = await Account.findById(account._id);
+    const { transaction } = await recordExpense({
+      staffId,
+      account: refreshed,
+      amount: feeAmount,
+      currencyCode: withdrawal.currencyCode || refreshed.currencyCode,
+      description,
+      expenseFriendlyId: expense.expenseId,
+      occurredAt: spentAt,
+    });
+
+    expense.transactionFriendlyId = transaction.transactionId;
+    await expense.save();
+
+    withdrawal.expenseFriendlyId = expense.expenseId;
+    await withdrawal.save();
+
+    return { expense, transaction, mode: 'allocation' };
+  }
+
+  const refreshed = await Account.findById(account._id);
+  const result = await debitForWithdrawal({
+    staffId,
+    account: refreshed,
+    amount: withdrawal.amount,
+    currencyCode: withdrawal.currencyCode || refreshed.currencyCode,
+    withdrawalFriendlyId: withdrawal.withdrawalId,
+    description: `Cash-out ${withdrawal.withdrawalId} settled`,
+  });
+  return { ...result, mode: 'passthrough' };
+}
+
 export default {
   creditCompanyForPayment,
   transfer,
@@ -472,5 +542,6 @@ export default {
   debitCompanyCreditStaff,
   refundCompanyDebitStaff,
   recordExpense,
+  settleAdminWithdrawal,
   manualAdjustment,
 };

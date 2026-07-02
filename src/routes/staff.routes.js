@@ -77,9 +77,9 @@ router.get('/accounts/:accountId', adminOnly(), accounts.getOne);
 // so admins can browse every staff member's accounts from one place.
 router.get('/withdrawal-accounts', withdrawals.listWithdrawalAccounts);
 router.post('/withdrawal-accounts', forbidAdmin(), withdrawals.addWithdrawalAccount);
+router.post('/withdrawal-accounts/verify-neero', forbidAdmin(), withdrawals.verifyNeeroAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/verify', forbidAdmin(), withdrawals.verifyWithdrawalAccount);
 router.post('/withdrawal-accounts/:withdrawalAccountId/resend-otp', forbidAdmin(), withdrawals.resendOtp);
-router.delete('/withdrawal-accounts/:withdrawalAccountId', forbidAdmin(), withdrawals.deactivateWithdrawalAccount);
 
 // Admin lists withdrawal accounts of a specific staff before initiating a payout.
 router.get('/staff/:staffId/withdrawal-accounts', adminOnly(), withdrawals.listForStaff);
