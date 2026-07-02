@@ -3,6 +3,7 @@ import mongoosePaginate from 'mongoose-paginate-v2';
 
 import { generateFriendlyId } from '../utils/idGenerator.js';
 import config from '../config/index.js';
+import { CLASS_LEVELS, CLASS_TIME_SLOTS } from '../config/classMetadata.js';
 
 const { Schema } = mongoose;
 
@@ -10,6 +11,8 @@ const classSchema = new Schema(
   {
     classId: { type: String, unique: true, index: true },
     title: { type: String, required: true, trim: true },
+    level: { type: String, enum: CLASS_LEVELS, uppercase: true, trim: true },
+    timeSlot: { type: String, enum: CLASS_TIME_SLOTS, uppercase: true, trim: true },
     description: { type: String, trim: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },

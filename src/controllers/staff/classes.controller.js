@@ -3,11 +3,14 @@ import Joi from 'joi';
 import { Class, User, Payment, ClassEnrollment } from '../../models/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { ERROR_CODES } from '../../config/index.js';
+import { CLASS_LEVELS, CLASS_TIME_SLOTS } from '../../config/classMetadata.js';
 import { readPagination } from '../../utils/pagination.js';
 
 const createSchema = Joi.object({
   title: Joi.string().min(1).max(200).required(),
   description: Joi.string().allow('', null),
+  level: Joi.string().uppercase().valid(...CLASS_LEVELS).required(),
+  timeSlot: Joi.string().uppercase().valid(...CLASS_TIME_SLOTS).required(),
   startDate: Joi.date().required(),
   endDate: Joi.date().min(Joi.ref('startDate')).required(),
   fee: Joi.number().min(0).required(),
@@ -172,6 +175,8 @@ const details = asyncHandler(async (req, res) => {
 const updateSchema = Joi.object({
   title: Joi.string().min(1).max(200),
   description: Joi.string().allow('', null),
+  level: Joi.string().uppercase().valid(...CLASS_LEVELS),
+  timeSlot: Joi.string().uppercase().valid(...CLASS_TIME_SLOTS),
   startDate: Joi.date(),
   endDate: Joi.date(),
   fee: Joi.number().min(0),
