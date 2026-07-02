@@ -275,14 +275,12 @@ const batchAssignToClass = asyncHandler(async (req, res) => {
   const users = await User.find({ userId: { $in: value.userIds } });
   if (users.length === 0) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
 
-  await User.assignToClass(users.map((u) => u._id), cls._id);
-
-  // Update class-history for every promoted user: close their previous
-  // active enrollment (if any) and open a new one on the target class.
-  // Errors on individual users don't block the rest of the batch.
+  // Enroll BEFORE assignToClass so user.classId still points at the source class
+  // when we snapshot/close the previous ClassEnrollment row.
   const results = await Promise.allSettled(
     users.map((u) => ClassEnrollment.enroll({ user: u, classDoc: cls, staffId: req.staff._id }))
   );
+  await User.assignToClass(users.map((u) => u._id), cls._id);
   const enrolled = results.filter((r) => r.status === 'fulfilled').length;
 
   return ok(res, {

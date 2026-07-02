@@ -80,6 +80,39 @@ classEnrollmentSchema.statics.enroll = async function enroll({
     current.isActive = false;
     current.leftAt = now;
     await current.save(sessOpt);
+  } else if (user.classId && !user.classId.equals(classDoc._id)) {
+    // User reassigned via User.classId but never had a ClassEnrollment row on the
+    // previous class — snapshot it now so session stats (inscrits / promus) stay correct.
+    const priorRow = await this.findOne({ userId: user._id, classId: user.classId }, null, sessOpt);
+    if (priorRow) {
+      if (priorRow.isActive) {
+        priorRow.isActive = false;
+        priorRow.leftAt = now;
+        await priorRow.save(sessOpt);
+      }
+    } else {
+      const oldClassDoc = await mongoose.model('Class').findById(user.classId, null, sessOpt);
+      if (oldClassDoc) {
+        await this.create(
+          [{
+            userId: user._id,
+            userFriendlyId: user.userId,
+            classId: oldClassDoc._id,
+            classFriendlyId: oldClassDoc.classId,
+            classTitle: oldClassDoc.title,
+            classFee: oldClassDoc.fee,
+            classCurrencyCode: oldClassDoc.currencyCode,
+            classStartDate: oldClassDoc.startDate,
+            classEndDate: oldClassDoc.endDate,
+            isActive: false,
+            joinedAt: user.createdAt || now,
+            leftAt: now,
+            enrolledByStaffId: staffId,
+          }],
+          session ? { session } : {}
+        );
+      }
+    }
   }
   const [created] = await this.create(
     [{
