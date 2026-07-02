@@ -1,0 +1,380 @@
+import Joi from 'joi';
+
+import { User, Class, ClassEnrollment } from '../../models/index.js';
+import { ok, fail, asyncHandler } from '../../utils/response.js';
+import { generateRandomPassword } from '../../utils/password.js';
+import emailService from '../../services/email.service.js';
+import smsService from '../../services/sms.service.js';
+import { readPagination } from '../../utils/pagination.js';
+import { fireAndForget } from '../../utils/fireAndForget.js';
+import { ERROR_CODES } from '../../config/index.js';
+
+const createSchema = Joi.object({
+  name: Joi.string().min(1).max(120).required(),
+  phone: Joi.string().min(6).max(30).required(),
+  email: Joi.string().email().allow(null, ''),
+  classId: Joi.string().allow(null, ''), // friendly id of the class to assign
+});
+
+const create = asyncHandler(async (req, res) => {
+  const value = await createSchema.validateAsync(req.body);
+
+  const exists = await User.existsByEmailOrPhone({ email: value.email, phone: value.phone });
+  if (exists) return fail(res, req.$t('user_already_exists'), ERROR_CODES.CONFLICT);
+
+  let classDoc = null;
+  if (value.classId) {
+    classDoc = await Class.findByFriendlyId(value.classId);
+    if (!classDoc) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
+  }
+
+  const plainPassword = generateRandomPassword(8);
+  // console.log(`Generated password: ${plainPassword}`); /**To be removed in production and when email/SMS services are implemented */
+  const user = await User.createWithPassword({
+    name: value.name,
+    email: value.email || undefined,
+    phone: value.phone,
+    plainPassword,
+    classId: classDoc ? classDoc._id : undefined,
+    createdByStaffId: req.staff._id,
+  });
+
+  // Class history — record the enrollment so the user's class timeline
+  // starts here. No-op when no class was assigned at creation.
+  if (classDoc) {
+    await ClassEnrollment.enroll({ user, classDoc, staffId: req.staff._id });
+  }
+
+  // Fire-and-forget: respond immediately, deliver credentials in the background.
+  // SMS goes to the (now-required) phone; if an email is on file, send a copy
+  // there too. Failures are logged but do not block the API response.
+  fireAndForget(
+    smsService.sendUserCredentials({ to: value.phone, name: value.name, password: plainPassword }),
+    'sms:user-credentials'
+  );
+  if (value.email) {
+    fireAndForget(
+      emailService.sendUserCredentials({
+        to: value.email,
+        name: value.name,
+        password: plainPassword,
+        kind: 'email',
+      }),
+      'email:user-credentials'
+    );
+  }
+
+  return ok(res, {
+    user: user.toSafeJSON(),
+    message: req.$t('user_created'),
+  });
+});
+
+const list = asyncHandler(async (req, res) => {
+  const { q, classId } = req.query;
+  const { page, limit } = readPagination(req);
+  const filter = {};
+  if (q) {
+    filter.$or = [
+      { name: { $regex: q, $options: 'i' } },
+      { email: { $regex: q, $options: 'i' } },
+      { phone: { $regex: q, $options: 'i' } },
+      { userId: { $regex: q, $options: 'i' } },
+    ];
+  }
+  if (classId) {
+    const cls = await Class.findByFriendlyId(classId);
+    if (cls) filter.classId = cls._id;
+  }
+  const result = await User.paginate(filter, {
+    page,
+    limit,
+    sort: '-createdAt',
+    populate: { path: 'classId', select: 'classId title' },
+  });
+  return ok(res, result);
+});
+
+const getOne = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId }).populate('classId');
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  return ok(res, { user });
+});
+
+/**
+ * A user's class history — every enrollment they've had, active first.
+ * Staff-facing view; user-facing equivalent is GET /users/my-classes.
+ */
+const classHistory = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  const { page, limit } = readPagination(req);
+  const result = await ClassEnrollment.paginate(
+    { userId: user._id },
+    { page, limit, sort: { isActive: -1, joinedAt: -1 } }
+  );
+  return ok(res, {
+    user: { userId: user.userId, name: user.name, email: user.email, phone: user.phone },
+    ...result,
+  });
+});
+
+/**
+ * Bulk-create users. Each row is processed independently so a single bad
+ * record doesn't fail the entire batch. The response surfaces three lists
+ * keyed by the original row index so the staff UI can highlight per-row
+ * outcomes:
+ *
+ *   created  — successfully created users (creds delivered)
+ *   skipped  — duplicates (only populated when options.skipDuplicates=true)
+ *   failed   — validation / lookup / DB errors
+ *
+ * options.skipDuplicates (default true): when a phone or email already maps
+ * to a user, skip silently. When false, the duplicate is reported under
+ * `failed` with a CONFLICT error.
+ */
+const bulkCreateRowSchema = Joi.object({
+  name: Joi.string().min(1).max(120).required(),
+  phone: Joi.string().min(6).max(30).required(),
+  email: Joi.string().email().allow(null, ''),
+  classId: Joi.string().allow(null, ''),
+});
+
+const bulkCreateSchema = Joi.object({
+  options: Joi.object({
+    skipDuplicates: Joi.boolean().default(true),
+  }).default({ skipDuplicates: true }),
+  users: Joi.array().items(Joi.any()).min(1).max(500).required(),
+});
+
+const bulkCreate = asyncHandler(async (req, res) => {
+  const value = await bulkCreateSchema.validateAsync(req.body);
+  const skipDuplicates = value.options.skipDuplicates;
+
+  // Cache class lookups so we don't re-query the same friendly id N times
+  const classCache = new Map();
+  async function resolveClass(classFriendlyId) {
+    if (!classFriendlyId) return null;
+    if (classCache.has(classFriendlyId)) return classCache.get(classFriendlyId);
+    const c = await Class.findByFriendlyId(classFriendlyId);
+    classCache.set(classFriendlyId, c || null);
+    return c || null;
+  }
+
+  const created = [];
+  const skipped = [];
+  const failed = [];
+
+  for (let index = 0; index < value.users.length; index += 1) {
+    const raw = value.users[index];
+
+    // Per-row validation — failures are reported, not thrown
+    let row;
+    try {
+      row = await bulkCreateRowSchema.validateAsync(raw);
+    } catch (err) {
+      failed.push({ index, errorCode: ERROR_CODES.VALIDATION, errorMsg: err.message, input: raw });
+      continue;
+    }
+
+    try {
+      const exists = await User.existsByEmailOrPhone({ email: row.email, phone: row.phone });
+      if (exists) {
+        if (skipDuplicates) {
+          skipped.push({ index, reason: 'duplicate', phone: row.phone, email: row.email || null });
+        } else {
+          failed.push({
+            index,
+            errorCode: ERROR_CODES.CONFLICT,
+            errorMsg: req.$t('user_already_exists'),
+            input: raw,
+          });
+        }
+        continue;
+      }
+
+      let classDoc = null;
+      if (row.classId) {
+        classDoc = await resolveClass(row.classId);
+        if (!classDoc) {
+          failed.push({
+            index,
+            errorCode: ERROR_CODES.NOT_FOUND,
+            errorMsg: req.$t('class_not_found'),
+            input: raw,
+          });
+          continue;
+        }
+      }
+
+      const plainPassword = generateRandomPassword(10);
+      const user = await User.createWithPassword({
+        name: row.name,
+        email: row.email || undefined,
+        phone: row.phone,
+        plainPassword,
+        classId: classDoc ? classDoc._id : undefined,
+        createdByStaffId: req.staff._id,
+      });
+
+      if (classDoc) {
+        await ClassEnrollment.enroll({ user, classDoc, staffId: req.staff._id });
+      }
+
+      // Credential delivery — fire-and-forget per channel. SMS always, email
+      // copy when present. We do NOT await: a 500-row batch shouldn't sit
+      // behind 500 sequential SMS round-trips. Failures are logged.
+      fireAndForget(
+        smsService.sendUserCredentials({ to: row.phone, name: row.name, password: plainPassword }),
+        `sms:user-credentials:bulk[${index}]`
+      );
+      if (row.email) {
+        fireAndForget(
+          emailService.sendUserCredentials({
+            to: row.email, name: row.name, password: plainPassword, kind: 'email',
+          }),
+          `email:user-credentials:bulk[${index}]`
+        );
+      }
+
+      created.push({ index, user: user.toSafeJSON() });
+    } catch (err) {
+      failed.push({
+        index,
+        errorCode: ERROR_CODES.GENERIC,
+        errorMsg: err.message || 'create_failed',
+        input: raw,
+      });
+    }
+  }
+
+  return ok(res, {
+    summary: {
+      total: value.users.length,
+      created: created.length,
+      skipped: skipped.length,
+      failed: failed.length,
+    },
+    created,
+    skipped,
+    failed,
+    message: req.$t('users_batch_created'),
+  });
+});
+
+const batchAssignSchema = Joi.object({
+  userIds: Joi.array().items(Joi.string()).min(1).required(),
+  classId: Joi.string().required(),
+});
+
+const batchAssignToClass = asyncHandler(async (req, res) => {
+  const value = await batchAssignSchema.validateAsync(req.body);
+  const cls = await Class.findByFriendlyId(value.classId);
+  if (!cls) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
+
+  const users = await User.find({ userId: { $in: value.userIds } });
+  if (users.length === 0) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+
+  await User.assignToClass(users.map((u) => u._id), cls._id);
+
+  // Update class-history for every promoted user: close their previous
+  // active enrollment (if any) and open a new one on the target class.
+  // Errors on individual users don't block the rest of the batch.
+  const results = await Promise.allSettled(
+    users.map((u) => ClassEnrollment.enroll({ user: u, classDoc: cls, staffId: req.staff._id }))
+  );
+  const enrolled = results.filter((r) => r.status === 'fulfilled').length;
+
+  return ok(res, {
+    count: users.length,
+    enrolled,
+    message: req.$t('users_batch_assigned'),
+  });
+});
+
+// `isActive` is intentionally NOT in the update schema — toggling account
+// state goes through the dedicated /disable and /enable endpoints below so
+// the operation is auditable and uses a single code path.
+const updateSchema = Joi.object({
+  name: Joi.string().min(1).max(120),
+}).min(1);
+
+const update = asyncHandler(async (req, res) => {
+  const value = await updateSchema.validateAsync(req.body);
+  const user = await User.findOneAndUpdate({ userId: req.params.userId }, { $set: value }, { new: true });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  return ok(res, { user: user.toSafeJSON() });
+});
+
+/**
+ * Disable a user's account. A disabled user cannot log in and any existing
+ * staff/user-auth middleware will treat them as unauthenticated, so live
+ * sessions are also invalidated on the next request.
+ */
+const disable = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  if (user.isActive === false) {
+    return ok(res, { user: user.toSafeJSON(), message: req.$t('user_disabled') });
+  }
+  user.isActive = false;
+  await user.save();
+  return ok(res, { user: user.toSafeJSON(), message: req.$t('user_disabled') });
+});
+
+const enable = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+  if (user.isActive === true) {
+    return ok(res, { user: user.toSafeJSON(), message: req.$t('user_enabled') });
+  }
+  user.isActive = true;
+  await user.save();
+  return ok(res, { user: user.toSafeJSON(), message: req.$t('user_enabled') });
+});
+
+// Generates a new random password for an existing user, forces them to change
+// it on next login (hsCp -> false) and dispatches the credentials via SMS
+// (always) and email (when available) — same channels used at account creation.
+const regeneratePassword = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  if (!user) return fail(res, req.$t('user_not_found'), ERROR_CODES.NOT_FOUND);
+
+  const plainPassword = generateRandomPassword(8);
+  await user.resetPassword(plainPassword);
+
+  // Fire-and-forget — same fast-response pattern as user creation.
+  fireAndForget(
+    smsService.sendUserCredentials({ to: user.phone, name: user.name, password: plainPassword }),
+    'sms:user-password-reset'
+  );
+  if (user.email) {
+    fireAndForget(
+      emailService.sendUserCredentials({
+        to: user.email,
+        name: user.name,
+        password: plainPassword,
+        kind: 'email',
+      }),
+      'email:user-password-reset'
+    );
+  }
+
+  return ok(res, {
+    user: user.toSafeJSON(),
+    message: req.$t('password_regenerated'),
+  });
+});
+
+export default {
+  create,
+  bulkCreate,
+  list,
+  getOne,
+  classHistory,
+  batchAssignToClass,
+  update,
+  disable,
+  enable,
+  regeneratePassword,
+};
