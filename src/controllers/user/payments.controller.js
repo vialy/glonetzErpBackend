@@ -5,6 +5,7 @@ import { ok, fail, asyncHandler } from '../../utils/response.js';
 import gateways from '../../services/gateways/index.js';
 import accounting from '../../services/accounting.service.js';
 import notifier from '../../services/notification.service.js';
+import { reconcilePaymentWithGateway } from '../../services/paymentReconciliation.service.js';
 import { readPagination } from '../../utils/pagination.js';
 import config, {
   ERROR_CODES,
@@ -13,10 +14,6 @@ import config, {
   WITHDRAWAL_ACCOUNT_PROVIDERS,
   NOTIFICATION_EVENTS,
 } from '../../config/index.js';
-
-/**
- * List the logged-in user's payments. ?status=pending to filter pending.
- */
 const list = asyncHandler(async (req, res) => {
   const { status } = req.query;
   const { page, limit } = readPagination(req);
@@ -198,4 +195,49 @@ const classSummary = asyncHandler(async (req, res) => {
   });
 });
 
-export default { list, pending, initiate, classSummary };
+/**
+ * POST /users/payments/:paymentId/verify
+ *
+ * Poll Neero for the authoritative status when the learner confirmed on their
+ * phone but the webhook did not settle the ERP record yet.
+ */
+const verify = asyncHandler(async (req, res) => {
+  const { paymentId } = req.params;
+  const payment = await Payment.findOne({ paymentId, userId: req.user._id });
+  if (!payment) return fail(res, req.$t('payment_not_found'), ERROR_CODES.NOT_FOUND);
+
+  if (payment.method !== PAYMENT_METHODS.ONLINE) {
+    return fail(res, req.$t('payment_verify_unavailable'), ERROR_CODES.VALIDATION);
+  }
+
+  let adapter;
+  if (config.isProduction) {
+    adapter = gateways.getByName(payment.provider);
+  } else {
+    adapter = await gateways.getActiveGateway();
+    if (adapter?.name !== payment.provider) adapter = null;
+  }
+
+  if (!adapter?.verify) {
+    return fail(res, req.$t('payment_verify_unavailable'), ERROR_CODES.VALIDATION);
+  }
+
+  const result = await reconcilePaymentWithGateway({
+    payment,
+    adapter,
+    raw: {
+      source: 'user_verify',
+      paymentId: payment.paymentId,
+      userId: req.user.userId,
+      at: new Date().toISOString(),
+    },
+  });
+
+  return ok(res, {
+    payment: result.payment,
+    outcome: result.outcome,
+    message: req.$t('payment_verify_complete'),
+  });
+});
+
+export default { list, pending, initiate, classSummary, verify };

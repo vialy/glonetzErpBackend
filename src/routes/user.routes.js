@@ -45,6 +45,7 @@ router.get('/payments/pending', payments.pending);
 router.get('/payments/class-summary', payments.classSummary);
 router.get('/payments/class-summary/:classId', payments.classSummary);
 router.post('/payments/initiate', payments.initiate);
+router.post('/payments/:paymentId/verify', payments.verify);
 
 router.get('/claims', claims.list);
 router.post('/claims', upload.single('proof'), claims.create);

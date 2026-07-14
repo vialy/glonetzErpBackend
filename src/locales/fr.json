@@ -47,6 +47,8 @@
 
   "payment_initiated": "Le paiement a été initié.",
   "payment_not_found": "Paiement introuvable.",
+  "payment_verify_unavailable": "La vérification de ce paiement n'est pas disponible.",
+  "payment_verify_complete": "Vérification du paiement terminée.",
   "payment_already_settled": "Ce paiement a déjà été réglé.",
   "manual_payment_recorded": "Paiement manuel enregistré.",
   "payments_currently_unavailable": "Les paiements sont indisponibles. Veuillez réessayer plus tard.",
