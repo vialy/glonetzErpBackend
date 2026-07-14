@@ -134,6 +134,41 @@ classEnrollmentSchema.statics.enroll = async function enroll({
   return created;
 };
 
+/**
+ * Reassign a user to another class without recording history.
+ * Used when staff corrects a learner's class from the profile form.
+ * Updates the active enrollment row in place (same joinedAt).
+ * Falls back to enroll() when no active row exists yet.
+ */
+classEnrollmentSchema.statics.reassign = async function reassign({
+  user,
+  classDoc,
+  staffId,
+  session,
+}) {
+  const sessOpt = session ? { session } : {};
+
+  const current = await this.findOne({ userId: user._id, isActive: true }, null, sessOpt);
+  if (current && current.classId.equals(classDoc._id)) {
+    return current;
+  }
+
+  if (!current) {
+    return this.enroll({ user, classDoc, staffId, session });
+  }
+
+  current.classId = classDoc._id;
+  current.classFriendlyId = classDoc.classId;
+  current.classTitle = classDoc.title;
+  current.classFee = classDoc.fee;
+  current.classCurrencyCode = classDoc.currencyCode;
+  current.classStartDate = classDoc.startDate;
+  current.classEndDate = classDoc.endDate;
+  if (staffId) current.enrolledByStaffId = staffId;
+  await current.save(sessOpt);
+  return current;
+};
+
 classEnrollmentSchema.statics.forUser = function forUser(userObjectId) {
   return this.find({ userId: userObjectId }).sort({ isActive: -1, joinedAt: -1 });
 };

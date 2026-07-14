@@ -1,6 +1,6 @@
 import Joi from 'joi';
 
-import { Expense, Account } from '../../models/index.js';
+import { Expense, Account, ExpenseCategory } from '../../models/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { readPagination } from '../../utils/pagination.js';
 import accounting from '../../services/accounting.service.js';
@@ -10,11 +10,22 @@ import { ERROR_CODES, STAFF_ROLES } from '../../config/index.js';
 /**
  * Resolve the account the expense should be debited from. For non-admin
  * staff this is always their personal account (auto-created on first use,
- * mirroring /accounts/me). For admin, this is the default company account.
+ * mirroring /accounts/me). For admin, defaults to the company account but
+ * may target any company or virtual treasury account via accountId.
  */
-async function resolveAccount(staff) {
+async function resolveAccount(staff, accountFriendlyId) {
   if (staff.role === STAFF_ROLES.ADMIN) {
-    return Account.findDefaultCompany();
+    const friendlyId = accountFriendlyId?.trim();
+    if (friendlyId) {
+      const account = await Account.findByFriendlyId(friendlyId);
+      if (!account) return { account: null };
+      if (account.type !== 'company' && account.type !== 'virtual') {
+        return { account: null, forbidden: true };
+      }
+      return { account };
+    }
+    const account = await Account.findDefaultCompany();
+    return { account };
   }
   let account = await Account.findByStaff(staff._id);
   if (!account) {
@@ -25,7 +36,7 @@ async function resolveAccount(staff) {
       balance: 0,
     });
   }
-  return account;
+  return { account };
 }
 
 function buildDescription(value) {
@@ -46,6 +57,14 @@ function parseSpentAt(value) {
   return date;
 }
 
+async function resolveExpenseCategory(categoryId) {
+  const key = categoryId?.trim();
+  if (!key) return { categoryId: undefined, categoryLabel: undefined };
+  const category = await ExpenseCategory.findByCategoryKey(key);
+  if (!category || category.isActive === false) return null;
+  return { categoryId: category.categoryKey, categoryLabel: category.label };
+}
+
 const createSchema = Joi.object({
   amount: Joi.number().integer().min(1).required(),
   spentAt: Joi.alternatives().try(Joi.date(), Joi.string()).required(),
@@ -53,6 +72,7 @@ const createSchema = Joi.object({
   categoryId: Joi.string().max(80).allow('', null),
   categoryLabel: Joi.string().max(200).allow('', null),
   comment: Joi.string().max(1000).allow('', null),
+  accountId: Joi.string().max(80).allow('', null),
 }).custom((value, helpers) => {
   if (!value.description?.trim() && !value.categoryLabel?.trim()) {
     return helpers.error('any.custom', { message: 'description_or_category_required' });
@@ -69,7 +89,22 @@ const create = asyncHandler(async (req, res) => {
   const spentAt = parseSpentAt(value.spentAt);
   const description = buildDescription(value);
 
-  const account = await resolveAccount(req.staff);
+  let categoryId = value.categoryId?.trim() || undefined;
+  let categoryLabel = value.categoryLabel?.trim() || undefined;
+  if (categoryId) {
+    const resolved = await resolveExpenseCategory(categoryId);
+    if (!resolved) {
+      return fail(res, req.$t('expense_category_not_found'), ERROR_CODES.EXPENSE_CATEGORY_NOT_FOUND);
+    }
+    categoryId = resolved.categoryId;
+    categoryLabel = resolved.categoryLabel;
+  }
+
+  const resolved = await resolveAccount(req.staff, value.accountId);
+  if (resolved.forbidden) {
+    return fail(res, req.$t('account_not_adjustable'), ERROR_CODES.FORBIDDEN);
+  }
+  const account = resolved.account;
   if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
   if (account.balance < value.amount) {
     return fail(res, req.$t('insufficient_funds'), ERROR_CODES.INSUFFICIENT_FUNDS);
@@ -83,8 +118,8 @@ const create = asyncHandler(async (req, res) => {
     currencyCode: account.currencyCode,
     description,
     spentAt,
-    categoryId: value.categoryId?.trim() || undefined,
-    categoryLabel: value.categoryLabel?.trim() || undefined,
+    categoryId,
+    categoryLabel,
     comment: value.comment?.trim() || undefined,
   };
   if (req.file) {
@@ -124,8 +159,35 @@ function buildDateRangeFilter(from, to) {
 }
 
 /**
+ * Admin-only filter: extraordinary = debited from company or virtual treasury
+ * accounts; manager = debited from staff envelope accounts.
+ */
+async function applyScopeFilter(filter, scope, staffRole, accountFriendlyId) {
+  if (!scope || staffRole !== STAFF_ROLES.ADMIN) return;
+  if (scope === 'extraordinary') {
+    if (accountFriendlyId?.trim()) {
+      const account = await Account.findByFriendlyId(accountFriendlyId.trim());
+      if (account && (account.type === 'company' || account.type === 'virtual')) {
+        filter.accountId = account._id;
+      }
+      return;
+    }
+    const treasuryAccounts = await Account.find({
+      type: { $in: ['company', 'virtual'] },
+      isActive: true,
+    }).select('_id').lean();
+    filter.accountId = { $in: treasuryAccounts.map((a) => a._id) };
+    return;
+  }
+  if (scope === 'manager') {
+    const staffAccounts = await Account.find({ type: 'staff' }).select('_id').lean();
+    filter.accountId = { $in: staffAccounts.map((a) => a._id) };
+  }
+}
+
+/**
  * List expenses. Non-admin staff see only their own; admin sees all and can
- * filter by ?staffId= (friendly id), ?from / ?to (on spentAt).
+ * filter by ?staffId= (friendly id), ?from / ?to (on spentAt), ?scope=extraordinary|manager.
  */
 const list = asyncHandler(async (req, res) => {
   const { page, limit } = readPagination(req);
@@ -137,6 +199,7 @@ const list = asyncHandler(async (req, res) => {
     const s = await Staff.findOne({ staffId: req.query.staffId });
     if (s) filter.staffId = s._id;
   }
+  await applyScopeFilter(filter, req.query.scope, req.staff.role, req.query.accountId);
   if (req.query.from || req.query.to) {
     const range = buildDateRangeFilter(req.query.from, req.query.to);
     filter.$or = [
@@ -146,7 +209,10 @@ const list = asyncHandler(async (req, res) => {
   }
   const result = await Expense.paginate(filter, {
     page, limit, sort: { spentAt: -1, createdAt: -1 },
-    populate: { path: 'staffId', select: 'staffId name email role' },
+    populate: [
+      { path: 'staffId', select: 'staffId name email role' },
+      { path: 'accountId', select: 'accountId name type' },
+    ],
   });
   return ok(res, result);
 });

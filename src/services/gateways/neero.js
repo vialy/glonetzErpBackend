@@ -300,6 +300,36 @@ export async function initiateWithdrawal({
 }
 
 /**
+ * Live merchant balance from Neero (where learner payments are collected).
+ * GET /api/v1/balances/payment-method/{paymentMethodId}
+ * Only valid for NEERO_MERCHANT payment method ids.
+ */
+export async function getMerchantBalance({ paymentMethodId } = {}) {
+  const merchantPmId = paymentMethodId || config.gateways.neero.merchantPmId;
+  if (!merchantPmId) {
+    return { ok: false, error: 'Neero merchant payment method id not configured' };
+  }
+  try {
+    const res = await client().get(`/api/v1/balances/payment-method/${merchantPmId}`);
+    const data = unwrap(res);
+    const balance = typeof data.balance === 'number' ? Math.round(data.balance) : null;
+    const currencyCode = data.currency || data.currencyCode || 'XAF';
+    if (balance === null) {
+      return { ok: false, error: 'invalid_balance_response', raw: data };
+    }
+    return {
+      ok: true,
+      balance,
+      currencyCode,
+      paymentMethodId: merchantPmId,
+      raw: data,
+    };
+  } catch (err) {
+    return { ok: false, error: errorPayload(err) };
+  }
+}
+
+/**
  * Verify a transaction intent by its Neero ID.
  *
  * Reads the flat response body returned by GET /transaction-intents/:id:
@@ -404,6 +434,7 @@ export default {
   resolvePaymentMethodId,
   initiatePayment,
   initiateWithdrawal,
+  getMerchantBalance,
   verify,
   parseCallback,
 };

@@ -36,14 +36,14 @@ export const STAFF_ROLES = Object.freeze({
   ADMIN: 1000,
   MANAGER: 600,
   AUDITOR: 500,
-  SUPPORT: 200,
+  COLLABORATEUR: 200,
 });
 
 export const STAFF_ROLE_NAMES = Object.freeze({
   1000: 'admin',
   600: 'manager',
   500: 'auditor',
-  200: 'support',
+  200: 'collaborateur',
 });
 
 export const PAYMENT_STATUSES = Object.freeze({
@@ -70,6 +70,30 @@ export const CLAIM_STATUSES = Object.freeze({
   SUCCESSFUL: 'successful',
   FAILED: 'failed',
 });
+
+export const SCHOLARSHIP_TYPES = Object.freeze({
+  FULL: 'full',
+  FIXED: 'fixed',
+  PERCENTAGE: 'percentage',
+});
+
+export const CERTIFICATE_KINDS = Object.freeze({
+  FORMATION: 'formation',
+  SCOLARITE: 'scolarite',
+});
+
+export const CERTIFICATE_STATUSES = Object.freeze({
+  BROUILLON: 'brouillon',
+  EN_ATTENTE: 'en_attente',
+  DISPONIBLE: 'disponible',
+});
+
+export const CERTIFICATE_CREATOR_ROLES = Object.freeze({
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+});
+
+export const CERTIFICATE_LEVELS = Object.freeze(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
 
 export const TRANSACTION_TYPES = Object.freeze({
   CREDIT: 'credit',
@@ -145,6 +169,15 @@ export const ERROR_CODES = Object.freeze({
   INSUFFICIENT_FUNDS: 3003,
   PAYMENT_NOT_FOUND: 3004,
   CLAIM_NOT_FOUND: 3005,
+  SCHOLARSHIP_NOT_FOUND: 3006,
+  CERTIFICATE_NOT_FOUND: 3007,
+  SCHOOL_CERTIFICATE_EXISTS: 3008,
+  DUPLICATE_CERTIFICATE: 3009,
+  CERTIFICATE_LOCKED: 3010,
+  FORMATION_TRAINING_NOT_FINISHED: 3011,
+  SCHOOL_PERIOD_NOT_FINISHED: 3012,
+  USER_HAS_PAYMENTS: 3013,
+  EXPENSE_CATEGORY_NOT_FOUND: 3014,
   OTP_INVALID: 4001,
   OTP_EXPIRED: 4002,
 });
@@ -162,7 +195,10 @@ export const ID_PREFIXES = Object.freeze({
   withdrawal: 'WDR',
   withdrawalAccount: 'WDA',
   expense: 'EXP',
+  expenseCategory: 'EXC',
   classEnrollment: 'ENR',
+  scholarship: 'SCH',
+  certificate: 'CRT',
 });
 
 const config = {
@@ -270,6 +306,11 @@ const config = {
   PAYMENT_METHODS,
   PAYMENT_PROVIDERS,
   CLAIM_STATUSES,
+  SCHOLARSHIP_TYPES,
+  CERTIFICATE_KINDS,
+  CERTIFICATE_STATUSES,
+  CERTIFICATE_CREATOR_ROLES,
+  CERTIFICATE_LEVELS,
   TRANSACTION_TYPES,
   TRANSACTION_SOURCES,
   WITHDRAWAL_STATUSES,

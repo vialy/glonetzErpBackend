@@ -2,6 +2,7 @@ import { User, Class, ClassEnrollment } from '../../models/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { readPagination } from '../../utils/pagination.js';
 import { ERROR_CODES } from '../../config/index.js';
+import classTimelineService from '../../services/classTimeline.service.js';
 
 const me = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).populate('classId');
@@ -29,4 +30,10 @@ const myClasses = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-export default { me, myClass, myClasses };
+/** Parcours de formation enrichi (inscriptions, paiements, bourses). */
+const myClassTimeline = asyncHandler(async (req, res) => {
+  const timeline = await classTimelineService.buildClassTimeline(req.user);
+  return ok(res, timeline);
+});
+
+export default { me, myClass, myClasses, myClassTimeline };

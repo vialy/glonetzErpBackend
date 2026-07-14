@@ -4,20 +4,26 @@ import config from '../config/index.js';
 let transporter = null;
 
 function getTransporter() {
-  if (transporter) return transporter;
   if (!config.smtp.host) {
     // No SMTP configured — fall back to JSON transport (logs the email).
     transporter = nodemailer.createTransport({ jsonTransport: true });
     return transporter;
   }
-  transporter = nodemailer.createTransport({
+  const options = {
     host: config.smtp.host,
     port: config.smtp.port,
     secure: config.smtp.secure,
     auth: config.smtp.user
       ? { user: config.smtp.user, pass: config.smtp.pass }
       : undefined,
-  });
+  };
+  // In development, rebuild the transporter so a backend restart picks up .env edits.
+  if (config.env !== 'production') {
+    return nodemailer.createTransport(options);
+  }
+  if (!transporter) {
+    transporter = nodemailer.createTransport(options);
+  }
   return transporter;
 }
 
@@ -39,6 +45,14 @@ export async function sendMail({ to, subject, text, html }) {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[email] send failed:', err.message);
+    if (String(err.message).includes('authentication failed')) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[email] SMTP auth rejected — check SMTP_USER/SMTP_PASS in .env, use the mailbox password from hPanel, '
+        + 'and enable third-party access (Hostinger/Titan: Settings → Enable Titan on other apps). '
+        + 'Host may need to be smtp.titan.email instead of smtp.hostinger.com.',
+      );
+    }
     return null;
   }
 }
@@ -63,20 +77,25 @@ export function sendUserCredentials({ to, name, password, kind }) {
 }
 
 export function sendStaffCredentials({ to, name, role, password }) {
-  const subject = `${config.appName} — Staff account created`;
+  const roleLabel =
+    role === 'manager' ? 'gestionnaire'
+    : role === 'auditor' ? 'comptable'
+    : role === 'collaborateur' ? 'collaborateur'
+    : role
+  const subject = `${config.appName} — Vos identifiants de connexion`
   const text = [
-    `Hi ${name || ''},`,
+    `Bonjour ${name || ''},`,
     '',
-    `A staff account has been created for you on ${config.appName} with role: ${role}.`,
-    `Login email: ${to}`,
-    `Temporary password: ${password}`,
+    `Un compte personnel a été créé pour vous sur ${config.appName} avec le rôle : ${roleLabel}.`,
+    `E-mail de connexion : ${to}`,
+    `Mot de passe temporaire : ${password}`,
     '',
-    'You will be required to change this password the first time you sign in.',
+    'Pour des raisons de sécurité, vous devrez changer ce mot de passe lors de votre première connexion.',
     '',
-    'Thanks,',
+    'Cordialement,',
     config.appName,
-  ].join('\n');
-  return sendMail({ to, subject, text });
+  ].join('\n')
+  return sendMail({ to, subject, text })
 }
 
 export function sendNotification({ to, subject, body }) {

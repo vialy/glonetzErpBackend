@@ -7,7 +7,9 @@ import config, {
   PAYMENT_METHODS,
   PAYMENT_PROVIDERS,
   NETWORK_OPERATORS,
+  SCHOLARSHIP_TYPES,
 } from '../config/index.js';
+import scholarshipService from '../services/scholarship.service.js';
 
 const { Schema } = mongoose;
 
@@ -128,17 +130,23 @@ paymentSchema.statics.classSummary = async function classSummary(userObjectId, c
     else if (row._id === PAYMENT_STATUSES.PENDING) pending = row.total;
   }
 
-  const expected = Number(classFee) || 0;
+  const catalogExpected = Number(classFee) || 0;
+  const scholarship = await scholarshipService.getActiveForUserClass(userObjectId, classObjectId);
+  const scholarshipDiscount = scholarshipService.computeDiscount(catalogExpected, scholarship);
+  const expected = Math.max(catalogExpected - scholarshipDiscount, 0);
   const remaining = Math.max(expected - paid - pending, 0);
 
   return {
+    catalogExpected,
+    scholarshipDiscount,
     expected,
     paid,
     pending,
     remaining,
-    fullyPaid: paid >= expected && expected > 0,
+    fullyPaid: remaining <= 0,
     currencyCode,
     paymentsCount,
+    scholarship: scholarshipService.toPublicScholarship(scholarship, catalogExpected),
   };
 };
 
@@ -167,17 +175,43 @@ paymentSchema.statics.classSummary = async function classSummary(userObjectId, c
 paymentSchema.statics.classRollup = async function classRollup(studentObjectIds, classObjectId, classFee) {
   const fee = Number(classFee) || 0;
   const studentCount = studentObjectIds.length;
-  const totalExpected = studentCount * fee;
+  const catalogExpected = studentCount * fee;
 
   if (studentCount === 0) {
     return {
       studentCount: 0,
       fullyPaidCount: 0,
+      scholarshipCount: 0,
+      scholarshipFullCount: 0,
+      catalogExpected: 0,
+      totalScholarship: 0,
+      netExpected: 0,
       totalExpected: 0,
       totalPaid: 0,
       totalRemaining: 0,
       paidByStudent: new Map(),
     };
+  }
+
+  const scholarshipMap = await scholarshipService.getActiveMapForClass(classObjectId, studentObjectIds);
+
+  let totalScholarship = 0;
+  let netExpected = 0;
+  let scholarshipCount = 0;
+  let scholarshipFullCount = 0;
+  const expectedByStudent = new Map();
+
+  for (const uid of studentObjectIds) {
+    const sch = scholarshipMap.get(String(uid));
+    const discount = scholarshipService.computeDiscount(fee, sch);
+    const expectedNet = Math.max(fee - discount, 0);
+    expectedByStudent.set(String(uid), expectedNet);
+    totalScholarship += discount;
+    netExpected += expectedNet;
+    if (sch) {
+      scholarshipCount += 1;
+      if (sch.type === SCHOLARSHIP_TYPES.FULL || discount >= fee) scholarshipFullCount += 1;
+    }
   }
 
   const agg = await this.aggregate([
@@ -195,19 +229,34 @@ paymentSchema.statics.classRollup = async function classRollup(studentObjectIds,
   let totalPaid = 0;
   let fullyPaidCount = 0;
   for (const row of agg) {
-    const paid = row.paid || 0;
-    paidByStudent.set(String(row._id), paid);
-    totalPaid += Math.min(paid, fee);
-    if (paid >= fee && fee > 0) fullyPaidCount += 1;
+    paidByStudent.set(String(row._id), row.paid || 0);
+  }
+
+  for (const uid of studentObjectIds) {
+    const key = String(uid);
+    const paid = paidByStudent.get(key) || 0;
+    const expectedNet = expectedByStudent.get(key) ?? fee;
+    if (expectedNet <= 0) {
+      fullyPaidCount += 1;
+      continue;
+    }
+    totalPaid += Math.min(paid, expectedNet);
+    if (paid >= expectedNet) fullyPaidCount += 1;
   }
 
   return {
     studentCount,
     fullyPaidCount,
-    totalExpected,
+    scholarshipCount,
+    scholarshipFullCount,
+    catalogExpected,
+    totalScholarship,
+    netExpected,
+    totalExpected: catalogExpected,
     totalPaid,
-    totalRemaining: Math.max(totalExpected - totalPaid, 0),
+    totalRemaining: Math.max(netExpected - totalPaid, 0),
     paidByStudent,
+    expectedByStudent,
   };
 };
 

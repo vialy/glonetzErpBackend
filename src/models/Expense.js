@@ -34,6 +34,9 @@ const expenseSchema = new Schema(
 
     // Link back to the ledger transaction created for this expense
     transactionFriendlyId: { type: String, index: true },
+    /** When the charge mirrors an admin payout (company → manager). */
+    withdrawalFriendlyId: { type: String, index: true },
+    transferId: { type: String, index: true },
   },
   { timestamps: true }
 );

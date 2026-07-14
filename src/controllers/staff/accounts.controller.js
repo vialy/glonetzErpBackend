@@ -2,9 +2,11 @@ import Joi from 'joi';
 
 import { Account, Staff, Transaction } from '../../models/index.js';
 import accounting from '../../services/accounting.service.js';
+import gateways from '../../services/gateways/index.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { readPagination } from '../../utils/pagination.js';
-import { ERROR_CODES, STAFF_ROLES } from '../../config/index.js';
+import { ERROR_CODES, PAYMENT_PROVIDERS, STAFF_ROLES } from '../../config/index.js';
+import config from '../../config/index.js';
 
 /**
  * GET /staff/accounts/me
@@ -30,6 +32,16 @@ const myAccount = asyncHandler(async (req, res) => {
   return ok(res, { account });
 });
 
+async function paginateAccountStatement(account, { from, to, page, limit }) {
+  const filter = { accountId: account._id };
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = new Date(from);
+    if (to) filter.createdAt.$lte = new Date(to);
+  }
+  return Transaction.paginate(filter, { page, limit, sort: '-createdAt' });
+}
+
 const statement = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const { page, limit } = readPagination(req);
@@ -40,13 +52,25 @@ const statement = asyncHandler(async (req, res) => {
     account = await Account.findByStaff(req.staff._id);
   }
   if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
-  const filter = { accountId: account._id };
-  if (from || to) {
-    filter.createdAt = {};
-    if (from) filter.createdAt.$gte = new Date(from);
-    if (to) filter.createdAt.$lte = new Date(to);
+  const result = await paginateAccountStatement(account, { from, to, page, limit });
+  return ok(res, { account, ...result });
+});
+
+/**
+ * GET /staff/accounts/:accountId/statement
+ *
+ * Admin-only statement for a specific company or virtual account.
+ * Used by the treasury wallets screen to show history per wallet.
+ */
+const statementByAccount = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const { page, limit } = readPagination(req);
+  const account = await Account.findByFriendlyId(req.params.accountId);
+  if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
+  if (account.type === 'staff') {
+    return fail(res, req.$t('account_not_adjustable'), ERROR_CODES.FORBIDDEN);
   }
-  const result = await Transaction.paginate(filter, { page, limit, sort: '-createdAt' });
+  const result = await paginateAccountStatement(account, { from, to, page, limit });
   return ok(res, { account, ...result });
 });
 
@@ -93,6 +117,85 @@ const totals = asyncHandler(async (req, res) => {
     totalBalance,
     perType,
     counts,
+  });
+});
+
+/**
+ * GET /staff/accounts/neero-balance
+ *
+ * Admin-only live balance from the Neero merchant account (where learner
+ * payments land) compared to the internal company ledger balance.
+ */
+const neeroBalance = asyncHandler(async (req, res) => {
+  const company = await Account.findDefaultCompany();
+  const ledgerBalance = company?.balance ?? 0;
+  const currencyCode = company?.currencyCode ?? 'XAF';
+  const fetchedAt = new Date().toISOString();
+  const basePayload = {
+    ledgerBalance,
+    currencyCode,
+    fetchedAt,
+    account: company
+      ? { accountId: company.accountId, name: company.name, type: company.type }
+      : null,
+  };
+
+  const { merchantPmId, secretKey } = config.gateways.neero;
+  if (!merchantPmId) {
+    return ok(res, {
+      ...basePayload,
+      neeroBalance: null,
+      gap: null,
+      source: 'ledger_only',
+      available: false,
+      message: req.$t('neero_merchant_not_configured'),
+    });
+  }
+
+  if (!config.isProduction && !secretKey) {
+    return ok(res, {
+      ...basePayload,
+      neeroBalance: ledgerBalance,
+      gap: 0,
+      source: 'simulated',
+      available: true,
+      paymentMethodId: merchantPmId,
+      message: req.$t('neero_balance_simulated'),
+    });
+  }
+
+  const neeroAdapter = gateways.getByName(PAYMENT_PROVIDERS.NEERO);
+  if (!neeroAdapter?.getMerchantBalance) {
+    return fail(res, req.$t('gateway_unavailable'), ERROR_CODES.GATEWAY_UNAVAILABLE, {
+      ...basePayload,
+      neeroBalance: null,
+      gap: null,
+      source: 'error',
+      available: false,
+    });
+  }
+
+  const result = await neeroAdapter.getMerchantBalance({ paymentMethodId: merchantPmId });
+  if (!result.ok) {
+    return fail(res, req.$t('gateway_error'), ERROR_CODES.GATEWAY_ERROR, {
+      ...basePayload,
+      neeroBalance: null,
+      gap: null,
+      source: 'error',
+      available: false,
+      paymentMethodId: merchantPmId,
+      detail: result.error,
+    });
+  }
+
+  const liveBalance = result.balance;
+  return ok(res, {
+    ...basePayload,
+    neeroBalance: liveBalance,
+    gap: liveBalance - ledgerBalance,
+    source: 'neero',
+    available: true,
+    paymentMethodId: result.paymentMethodId,
   });
 });
 
@@ -173,6 +276,25 @@ const transfer = asyncHandler(async (req, res) => {
     currencyCode: initiatorAccount.currencyCode,
     description: value.description,
   });
+
+  if (req.staff.role === STAFF_ROLES.ADMIN) {
+    const total = value.amount + (value.fee || 0);
+    const allocationLabel =
+      value.description?.trim() || `Transfert manager — ${beneficiaryStaff.name}`;
+    await accounting.createExpenseForLedgerDebit({
+      staffId: req.staff._id,
+      account: initiatorAccount,
+      amount: total,
+      currencyCode: initiatorAccount.currencyCode,
+      description: allocationLabel,
+      spentAt: new Date(),
+      categoryId: 'manager_allocation',
+      categoryLabel: 'Allocation manager',
+      comment: `Manager: ${beneficiaryStaff.name} (${beneficiaryStaff.staffId})`,
+      transactionFriendlyId: result.payerTransaction.transactionId,
+      transferId: result.transferId,
+    });
+  }
 
   return ok(res, { ...result, message: req.$t('transfer_completed') });
 });
@@ -284,7 +406,9 @@ const adjust = asyncHandler(async (req, res) => {
 export default {
   myAccount,
   statement,
+  statementByAccount,
   totals,
+  neeroBalance,
   listAll,
   transfer,
   createVirtual,

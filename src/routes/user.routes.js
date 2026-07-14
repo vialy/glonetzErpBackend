@@ -9,6 +9,8 @@ import auth from '../controllers/user/auth.controller.js';
 import profile from '../controllers/user/profile.controller.js';
 import payments from '../controllers/user/payments.controller.js';
 import claims from '../controllers/user/claims.controller.js';
+import schoolCertificates from '../controllers/user/schoolCertificates.controller.js';
+import formationCertificates from '../controllers/user/formationCertificates.controller.js';
 
 const router = express.Router();
 
@@ -36,6 +38,7 @@ router.use(enforcePasswordChange);
 router.get('/me', profile.me);
 router.get('/my-class', profile.myClass);
 router.get('/my-classes', profile.myClasses);
+router.get('/my-class-timeline', profile.myClassTimeline);
 
 router.get('/payments', payments.list);
 router.get('/payments/pending', payments.pending);
@@ -45,5 +48,14 @@ router.post('/payments/initiate', payments.initiate);
 
 router.get('/claims', claims.list);
 router.post('/claims', upload.single('proof'), claims.create);
+
+router.get('/school-certificates/me', schoolCertificates.mine);
+router.get('/school-certificates/template', schoolCertificates.getTemplate);
+
+router.get('/certificates', formationCertificates.list);
+router.get('/certificates/me/enrolled-level', formationCertificates.getEnrolledLevel);
+router.put('/certificates/me/enrolled-level', formationCertificates.setEnrolledLevel);
+router.get('/certificates/me', formationCertificates.mine);
+router.get('/certificates/:certificateId', formationCertificates.getOne);
 
 export default router;

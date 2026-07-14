@@ -8,31 +8,41 @@ import {
 } from '../config/index.js';
 
 /**
+ * MongoDB transactions require a replica set or sharded cluster. On a local
+ * standalone instance `startTransaction()` may succeed but the first
+ * transactional write fails — detect topology up front and skip sessions.
+ */
+function replicaSetTransactionsAvailable() {
+  const topology = mongoose.connection?.client?.topology;
+  const type = topology?.description?.type;
+  return (
+    type === 'ReplicaSetWithPrimary'
+    || type === 'ReplicaSetNoPrimary'
+    || type === 'Sharded'
+  );
+}
+
+/**
  * Internal helper — wraps a callback in a MongoDB session/transaction when the
  * deployment supports it, otherwise runs the callback directly. Replica-set is
  * required for real transactions; we degrade gracefully on standalone Mongo.
  */
 async function withSession(fn) {
-  let session = null;
-  let supportsTxn = false;
-  try {
-    session = await mongoose.startSession();
-    session.startTransaction();
-    supportsTxn = true;
-  } catch (_) {
-    session = null;
+  if (!replicaSetTransactionsAvailable()) {
+    return fn(null);
   }
+
+  const session = await mongoose.startSession();
   try {
+    session.startTransaction();
     const result = await fn(session);
-    if (supportsTxn && session) await session.commitTransaction();
+    await session.commitTransaction();
     return result;
   } catch (err) {
-    if (supportsTxn && session) {
-      try { await session.abortTransaction(); } catch (_) { /* noop */ }
-    }
+    try { await session.abortTransaction(); } catch (_) { /* noop */ }
     throw err;
   } finally {
-    if (session) session.endSession();
+    await session.endSession();
   }
 }
 
@@ -204,7 +214,7 @@ export async function refundWithdrawal({ staffId, account, amount, currencyCode,
       currencyCode,
       openingBalance: opening,
       closingBalance: credited.balance,
-      description: `Refund for failed withdrawal ${withdrawalFriendlyId}${reason ? ` — ${reason}` : ''}`,
+      description: `Annulation - virement echoue (${withdrawalFriendlyId})`,
       withdrawalFriendlyId,
     });
     await tx.save(sessOpt);
@@ -332,7 +342,7 @@ export async function refundCompanyDebitStaff({
       currencyCode,
       openingBalance: staffOpening,
       closingBalance: staffDebited.balance,
-      description: `Refund for failed withdrawal ${withdrawalFriendlyId}${reason ? ` — ${reason}` : ''}`,
+      description: `Annulation - virement echoue (${withdrawalFriendlyId})`,
       transferId: transferFriendlyId,
       withdrawalFriendlyId,
     });
@@ -351,13 +361,17 @@ export async function refundCompanyDebitStaff({
       currencyCode,
       openingBalance: companyOpening,
       closingBalance: companyCredited.balance,
-      description: `Refund for failed withdrawal ${withdrawalFriendlyId}${reason ? ` — ${reason}` : ''}`,
+      description: `Annulation - virement echoue (${withdrawalFriendlyId})`,
       transferId: transferFriendlyId,
       withdrawalFriendlyId,
     });
 
     await staffTx.save(sessOpt);
     await companyTx.save(sessOpt);
+
+    if (withdrawalFriendlyId) {
+      await voidExpenseForLedgerReversal({ withdrawalFriendlyId, session });
+    }
 
     return {
       transferId: transferFriendlyId,
@@ -367,6 +381,59 @@ export async function refundCompanyDebitStaff({
       staffTx,
     };
   });
+}
+
+/**
+ * Record an expense metadata row for a debit that already exists on the ledger
+ * (withdrawal / transfer). Does not move balances — the linked transaction did.
+ */
+export async function createExpenseForLedgerDebit({
+  staffId,
+  account,
+  amount,
+  currencyCode,
+  description,
+  spentAt = new Date(),
+  categoryId,
+  categoryLabel,
+  comment,
+  transactionFriendlyId,
+  withdrawalFriendlyId,
+  transferId,
+  session,
+}) {
+  const { Expense } = await import('../models/index.js');
+  const sessOpt = session ? { session } : {};
+  const expense = await Expense.create([{
+    staffId,
+    accountId: account._id,
+    accountFriendlyId: account.accountId,
+    amount,
+    currencyCode,
+    description,
+    spentAt,
+    categoryId,
+    categoryLabel,
+    comment,
+    transactionFriendlyId,
+    withdrawalFriendlyId,
+    transferId,
+  }], sessOpt);
+  return expense[0];
+}
+
+/**
+ * Remove expense metadata when a company→staff payout is reversed.
+ */
+export async function voidExpenseForLedgerReversal({ withdrawalFriendlyId, transferId, session }) {
+  const { Expense } = await import('../models/index.js');
+  const filter = {};
+  if (withdrawalFriendlyId) filter.withdrawalFriendlyId = withdrawalFriendlyId;
+  else if (transferId) filter.transferId = transferId;
+  else return { deletedCount: 0 };
+  const sessOpt = session ? { session } : {};
+  const result = await Expense.deleteMany(filter, sessOpt);
+  return { deletedCount: result.deletedCount ?? 0 };
 }
 
 /**
@@ -484,7 +551,8 @@ export async function settleAdminWithdrawal({
     }
 
     const { Expense } = await import('../models/index.js');
-    const description = `Frais de retrait — ${withdrawal.withdrawalId}`;
+    const currency = withdrawal.currencyCode || account.currencyCode;
+    const description = `Frais de retrait virement : ${feeAmount.toLocaleString('fr-FR')} ${currency}`;
     const spentAt = new Date();
 
     const expense = await Expense.create({
@@ -496,7 +564,7 @@ export async function settleAdminWithdrawal({
       description,
       spentAt,
       categoryId: 'withdrawal_fee',
-      categoryLabel: 'Frais de retrait',
+      categoryLabel: 'Frais de retrait virement',
       comment: withdrawal.netAmount
         ? `Allocation nette ${withdrawal.netAmount.toLocaleString()} ${withdrawal.currencyCode || 'XAF'}`
         : undefined,
@@ -541,6 +609,8 @@ export default {
   refundWithdrawal,
   debitCompanyCreditStaff,
   refundCompanyDebitStaff,
+  createExpenseForLedgerDebit,
+  voidExpenseForLedgerReversal,
   recordExpense,
   settleAdminWithdrawal,
   manualAdjustment,

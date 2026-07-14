@@ -6,7 +6,6 @@ import { generateRandomPassword } from '../../utils/password.js';
 import emailService from '../../services/email.service.js';
 import { ERROR_CODES, STAFF_ROLES, STAFF_ROLE_NAMES } from '../../config/index.js';
 import { readPagination } from '../../utils/pagination.js';
-import { fireAndForget } from '../../utils/fireAndForget.js';
 
 /** Admin-only staff management. */
 
@@ -14,7 +13,7 @@ const createSchema = Joi.object({
   name: Joi.string().min(1).max(120).required(),
   email: Joi.string().email().required(),
   role: Joi.number()
-    .valid(STAFF_ROLES.MANAGER, STAFF_ROLES.AUDITOR, STAFF_ROLES.SUPPORT)
+    .valid(STAFF_ROLES.MANAGER, STAFF_ROLES.AUDITOR, STAFF_ROLES.COLLABORATEUR)
     .required(),
 });
 
@@ -25,24 +24,27 @@ const create = asyncHandler(async (req, res) => {
 
   const plain = generateRandomPassword(8);
 
-  console.log(`Creating staff account for ${value.email} with password ${plain}`);
   const staff = await Staff.createWithPassword({
     name: value.name,
     email: value.email,
     role: value.role,
     plainPassword: plain,
   });
-  // Fire-and-forget: respond immediately, email lands in the background.
-  fireAndForget(
-    emailService.sendStaffCredentials({
-      to: value.email,
-      name: value.name,
-      role: STAFF_ROLE_NAMES[value.role],
-      password: plain,
-    }),
-    'email:staff-credentials'
-  );
-  return ok(res, { staff: staff.toSafeJSON(), message: req.$t('staff_created') });
+
+  const credentialsEmailSent = await emailService.sendStaffCredentials({
+    to: value.email,
+    name: value.name,
+    role: STAFF_ROLE_NAMES[value.role],
+    password: plain,
+  }).then((info) => Boolean(info));
+
+  return ok(res, {
+    staff: staff.toSafeJSON(),
+    credentialsEmailSent,
+    message: credentialsEmailSent
+      ? req.$t('staff_created')
+      : req.$t('staff_created_email_failed'),
+  });
 });
 
 const list = asyncHandler(async (req, res) => {
@@ -75,7 +77,7 @@ const getOne = asyncHandler(async (req, res) => {
 // the role-hierarchy guard is always applied.
 const updateSchema = Joi.object({
   name: Joi.string().min(1).max(120),
-  role: Joi.number().valid(STAFF_ROLES.MANAGER, STAFF_ROLES.AUDITOR, STAFF_ROLES.SUPPORT),
+  role: Joi.number().valid(STAFF_ROLES.MANAGER, STAFF_ROLES.AUDITOR, STAFF_ROLES.COLLABORATEUR),
 }).min(1);
 
 const update = asyncHandler(async (req, res) => {
@@ -156,19 +158,19 @@ const regeneratePassword = asyncHandler(async (req, res) => {
   const plain = generateRandomPassword(8);
   await staff.resetPassword(plain);
 
-  fireAndForget(
-    emailService.sendStaffCredentials({
-      to: staff.email,
-      name: staff.name,
-      role: STAFF_ROLE_NAMES[staff.role],
-      password: plain,
-    }),
-    'email:staff-password-reset'
-  );
+  const credentialsEmailSent = await emailService.sendStaffCredentials({
+    to: staff.email,
+    name: staff.name,
+    role: STAFF_ROLE_NAMES[staff.role],
+    password: plain,
+  }).then((info) => Boolean(info));
 
   return ok(res, {
     staff: staff.toSafeJSON(),
-    message: req.$t('password_regenerated'),
+    credentialsEmailSent,
+    message: credentialsEmailSent
+      ? req.$t('password_regenerated')
+      : req.$t('password_regenerated_email_failed'),
   });
 });
 

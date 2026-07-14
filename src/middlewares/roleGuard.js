@@ -7,12 +7,13 @@ import { ERROR_CODES, STAFF_ROLES } from '../config/index.js';
  * Usage:
  *   router.post('/users', staffAuth, requireRole(STAFF_ROLES.MANAGER), handler);
  *
- * Roles are numeric (1000 admin, 600 manager, 500 auditor, 200 support). A
+ * Roles are numeric (1000 admin, 600 manager, 500 auditor, 200 collaborateur). A
  * request passes if `req.staff.role >= minRole`.
  *
  * Convenience helpers:
- *   adminOnly()      = requireRole(STAFF_ROLES.ADMIN)
- *   managerOrAbove() = requireRole(STAFF_ROLES.MANAGER)
+ *   adminOnly()             = requireRole(STAFF_ROLES.ADMIN)
+ *   managerOrAbove()        = requireRole(STAFF_ROLES.MANAGER)
+ *   collaborateurOrAbove()  = requireRole(STAFF_ROLES.COLLABORATEUR)
  */
 export function requireRole(minRole) {
   return function roleGuard(req, res, next) {
@@ -30,6 +31,10 @@ export function adminOnly() {
 
 export function managerOrAbove() {
   return requireRole(STAFF_ROLES.MANAGER);
+}
+
+export function collaborateurOrAbove() {
+  return requireRole(STAFF_ROLES.COLLABORATEUR);
 }
 
 export function forbidAdmin() {

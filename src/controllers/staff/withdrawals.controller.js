@@ -337,13 +337,29 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
   });
 
   // Step 1 + 2 — atomic ledger move (company → staff).
-  await accounting.debitCompanyCreditStaff({
+  const ledger = await accounting.debitCompanyCreditStaff({
     companyAccount,
     beneficiaryStaffId: beneficiary._id,
     beneficiaryAccount,
     amount: totalAmount,
     currencyCode: companyAccount.currencyCode,
     description: value.description || `Withdrawal ${withdrawal.withdrawalId} → ${wa.provider}`,
+    withdrawalFriendlyId: withdrawal.withdrawalId,
+  });
+
+  const allocationLabel =
+    value.description?.trim() || `Allocation manager — ${beneficiary.name}`;
+  await accounting.createExpenseForLedgerDebit({
+    staffId: req.staff._id,
+    account: companyAccount,
+    amount: totalAmount,
+    currencyCode: companyAccount.currencyCode,
+    description: allocationLabel,
+    spentAt: new Date(),
+    categoryId: 'manager_allocation',
+    categoryLabel: 'Allocation manager',
+    comment: `Manager: ${beneficiary.name} (${beneficiary.staffId}) · Net ${netAmount.toLocaleString('fr-FR')} ${companyAccount.currencyCode}`,
+    transactionFriendlyId: ledger.companyTx.transactionId,
     withdrawalFriendlyId: withdrawal.withdrawalId,
   });
 
@@ -408,6 +424,39 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Admin — paginated list of manager payouts (allocations) with gateway status.
+ */
+const listWithdrawals = asyncHandler(async (req, res) => {
+  const { page, limit } = readPagination(req);
+  const { staffId, status } = req.query;
+  const filter = {};
+
+  if (staffId) {
+    const target = await Staff.findOne({ staffId });
+    if (!target) {
+      return ok(res, {
+        docs: [], totalDocs: 0, page, limit, totalPages: 0, hasNextPage: false, hasPrevPage: false,
+      });
+    }
+    filter.staffId = target._id;
+  }
+  if (status && Object.values(WITHDRAWAL_STATUSES).includes(status)) {
+    filter.status = status;
+  }
+
+  const result = await Withdrawal.paginate(filter, {
+    page,
+    limit,
+    sort: '-createdAt',
+    populate: [
+      { path: 'staffId', select: 'staffId name email role' },
+      { path: 'withdrawalAccountId', select: 'phoneNumber provider withdrawalAccountId' },
+    ],
+  });
+  return ok(res, result);
+});
+
 export default {
   addWithdrawalAccount,
   verifyNeeroAccount,
@@ -415,5 +464,6 @@ export default {
   resendOtp,
   listWithdrawalAccounts,
   listForStaff,
+  listWithdrawals,
   initiateWithdrawal,
 };

@@ -14,6 +14,8 @@ const userSchema = new Schema(
     phone: { type: String, required: true, trim: true, index: true, unique: true },
     passwordHash: { type: String, required: true, select: false },
     hsCp: { type: Boolean, default: false }, // hasChangedPassword
+    dateOfBirth: { type: Date },
+    placeOfBirth: { type: String, trim: true, maxlength: 120 },
     classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
     isActive: { type: Boolean, default: true },
     createdByStaffId: { type: Schema.Types.ObjectId, ref: 'Staff' },
@@ -55,6 +57,8 @@ userSchema.statics.createWithPassword = async function createWithPassword({
   plainPassword,
   classId,
   createdByStaffId,
+  dateOfBirth,
+  placeOfBirth,
 }) {
   const passwordHash = await hash(plainPassword);
   return this.create({
@@ -64,6 +68,8 @@ userSchema.statics.createWithPassword = async function createWithPassword({
     passwordHash,
     classId,
     createdByStaffId,
+    dateOfBirth,
+    placeOfBirth,
     hsCp: false,
   });
 };

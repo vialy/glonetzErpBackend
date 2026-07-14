@@ -5,6 +5,7 @@ import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { ERROR_CODES } from '../../config/index.js';
 import { CLASS_LEVELS, CLASS_TIME_SLOTS } from '../../config/classMetadata.js';
 import { readPagination } from '../../utils/pagination.js';
+import certificateClassSyncService from '../../services/certificateClassSync.service.js';
 
 const createSchema = Joi.object({
   title: Joi.string().min(1).max(200).required(),
@@ -101,18 +102,26 @@ const details = asyncHandler(async (req, res) => {
   // Derive partially / unpaid counts from the paidByStudent map without
   // another DB call. A student with no entry in the map has paid 0.
   let partiallyPaidCount = 0;
-  for (const paid of rollup.paidByStudent.values()) {
-    if (paid > 0 && paid < cls.fee) partiallyPaidCount += 1;
+  let unpaidCount = 0;
+  for (const uid of studentObjectIds) {
+    const paid = rollup.paidByStudent.get(String(uid)) || 0;
+    const expectedNet = rollup.expectedByStudent?.get(String(uid)) ?? cls.fee;
+    if (expectedNet <= 0) continue;
+    if (paid <= 0) unpaidCount += 1;
+    else if (paid < expectedNet) partiallyPaidCount += 1;
   }
-  const studentsWithAnyPayment = rollup.paidByStudent.size;
-  const unpaidCount = rollup.studentCount - studentsWithAnyPayment;
 
   const current = {
     studentCount: rollup.studentCount,
     fullyPaidCount: rollup.fullyPaidCount,
     partiallyPaidCount,
     unpaidCount,
-    totalExpected: rollup.totalExpected,
+    catalogExpected: rollup.catalogExpected,
+    totalScholarship: rollup.totalScholarship,
+    netExpected: rollup.netExpected,
+    scholarshipCount: rollup.scholarshipCount,
+    scholarshipFullCount: rollup.scholarshipFullCount,
+    totalExpected: rollup.catalogExpected,
     totalPaid: rollup.totalPaid,
     totalRemaining: rollup.totalRemaining,
   };
@@ -168,6 +177,10 @@ const details = asyncHandler(async (req, res) => {
       totalExpected: current.totalExpected,
       totalPaid: session.totalPaid,
       totalRemaining: current.totalRemaining,
+      catalogExpected: current.catalogExpected,
+      netExpected: current.netExpected,
+      totalScholarship: current.totalScholarship,
+      scholarshipCount: current.scholarshipCount,
     },
   });
 });
@@ -188,7 +201,24 @@ const update = asyncHandler(async (req, res) => {
   const value = await updateSchema.validateAsync(req.body);
   const cls = await Class.findOneAndUpdate({ classId: req.params.classId }, { $set: value }, { new: true });
   if (!cls) return fail(res, req.$t('class_not_found'), ERROR_CODES.NOT_FOUND);
-  return ok(res, { class: cls, message: req.$t('class_updated') });
+
+  const shouldSyncCertificates =
+    value.startDate !== undefined ||
+    value.endDate !== undefined ||
+    value.title !== undefined ||
+    value.timeSlot !== undefined ||
+    value.level !== undefined;
+
+  let certificatesUpdated = null;
+  if (shouldSyncCertificates) {
+    certificatesUpdated = await certificateClassSyncService.propagateFromClass(cls);
+  }
+
+  return ok(res, {
+    class: cls,
+    certificatesUpdated,
+    message: req.$t('class_updated'),
+  });
 });
 
 export default { create, list, getOne, details, update };

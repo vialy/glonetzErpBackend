@@ -18,7 +18,7 @@ const staffSchema = new Schema(
       type: Number,
       enum: Object.values(STAFF_ROLES),
       required: true,
-      default: STAFF_ROLES.SUPPORT,
+      default: STAFF_ROLES.COLLABORATEUR,
     },
     hsCp: { type: Boolean, default: false }, // hasChangedPassword
     isActive: { type: Boolean, default: true },

@@ -3,6 +3,7 @@ import config from '../config/index.js';
 
 import { seedDefaultAdmin } from './admin.seeder.js';
 import { seedDefaultAccount } from './account.seeder.js';
+import { seedDefaultExpenseCategories } from './expenseCategories.seeder.js';
 
 /**
  * Runs all boot-time seeders in order.
@@ -19,6 +20,7 @@ import { seedDefaultAccount } from './account.seeder.js';
 export async function runSeeders() {
   await seedDefaultAdmin();
   await seedDefaultAccount();
+  await seedDefaultExpenseCategories();
 
   // Singleton settings doc — initialises the active gateway selection.
   const settings = await Setting.getSingleton();
@@ -30,5 +32,5 @@ export async function runSeeders() {
   }
 }
 
-export { seedDefaultAdmin, seedDefaultAccount };
+export { seedDefaultAdmin, seedDefaultAccount, seedDefaultExpenseCategories };
 export default runSeeders;
