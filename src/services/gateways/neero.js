@@ -37,9 +37,16 @@ const COUNTRY_DIAL_CODES = { CM: '+237' };
  */
 function stripCountryCode(phoneNumber, countryIso = 'CM') {
   const code = COUNTRY_DIAL_CODES[countryIso];
-  const raw = String(phoneNumber || '').trim();
+  let raw = String(phoneNumber || '').trim().replace(/\s+/g, '');
   if (!code) return raw;
-  return raw.startsWith(code) ? raw.slice(code.length).replace(/^\s+/, '') : raw;
+  const dialDigits = code.replace(/\D/g, '');
+  if (raw.startsWith(code)) {
+    return raw.slice(code.length).replace(/^\s+/, '');
+  }
+  if (raw.startsWith(dialDigits) && raw.length > dialDigits.length) {
+    return raw.slice(dialDigits.length);
+  }
+  return raw;
 }
 
 const PROVIDER_TO_NEERO = {
@@ -124,6 +131,44 @@ async function fetchPaymentMethodById(paymentMethodId) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve the merchant source payment method for cash-in / cash-out.
+ * Mirrors NeeroDriver.php: POST NEERO_MERCHANT when merchantKey is configured,
+ * otherwise fall back to the static NEERO_MERCHANT_PM_ID from env.
+ */
+async function resolveMerchantSourcePaymentMethod() {
+  const cfg = config.gateways.neero;
+  const { merchantKey, storeId, balanceId, operatorId, merchantPmId } = cfg;
+
+  if (merchantKey && storeId && balanceId && operatorId != null) {
+    try {
+      const res = await client().post('/api/v1/payment-methods', {
+        type: 'NEERO_MERCHANT',
+        neeroMerchantDetails: {
+          merchantKey,
+          storeId,
+          balanceId,
+          operatorId,
+        },
+      });
+      const data = unwrap(res);
+      const paymentMethodId = data.id || data.paymentMethodId;
+      if (!paymentMethodId) {
+        return { ok: false, error: 'merchant_pm_missing_id', raw: data };
+      }
+      return { ok: true, paymentMethodId, fromCache: false };
+    } catch (err) {
+      return { ok: false, error: errorPayload(err) };
+    }
+  }
+
+  if (merchantPmId) {
+    return { ok: true, paymentMethodId: merchantPmId, fromCache: true };
+  }
+
+  return { ok: false, error: 'Neero merchant payment method id not configured' };
 }
 
 /**
@@ -328,37 +373,40 @@ export async function initiateWithdrawal({
   provider,
   countryIso = 'CM',
   mchTransactionRef,
+  destinationPaymentMethodId: destinationOverride,
 }) {
-  const { merchantPmId } = config.gateways.neero;
-  if (!merchantPmId) {
-    return { ok: false, error: 'Neero merchant payment method id not configured' };
-  }
-
   const paymentType = PROVIDER_TO_CASHOUT_TYPE[provider];
   if (!paymentType) {
     return { ok: false, error: `Unsupported withdrawal provider: ${provider}` };
   }
 
-  // Resolve destination payment method id — every provider hits the local
-  // (phoneNumber, provider) cache; on miss the right body shape is sent.
-  const pm = await resolvePaymentMethodId({
-    phoneNumber,
-    provider,
-    countryIso,
-    forceRefresh: provider === 'neero',
-  });
-  if (!pm.ok) return pm;
-  const destinationPaymentMethodId = pm.paymentMethodId;
+  const merchant = await resolveMerchantSourcePaymentMethod();
+  if (!merchant.ok) return merchant;
+
+  let destinationPaymentMethodId = destinationOverride || null;
+  if (!destinationPaymentMethodId) {
+    const pm = await resolvePaymentMethodId({
+      phoneNumber,
+      provider,
+      countryIso,
+      forceRefresh: provider === 'neero',
+    });
+    if (!pm.ok) return pm;
+    destinationPaymentMethodId = pm.paymentMethodId;
+  }
 
   try {
     const res = await client().post('/api/v1/transaction-intents/cash-out', {
       amount,
       currencyCode,
       paymentType,
-      sourcePaymentMethodId: merchantPmId,
+      sourcePaymentMethodId: merchant.paymentMethodId,
       destinationPaymentMethodId,
       externalTransactionId: mchTransactionRef,
       confirm: true,
+      metadata: {
+        merchant_reference: mchTransactionRef,
+      },
     });
     const data = unwrap(res);
     const intent = extractIntent(data) || {};
@@ -379,6 +427,9 @@ export async function initiateWithdrawal({
       paymentType,
       amount,
       provider,
+      sourcePaymentMethodId: merchant?.paymentMethodId,
+      destinationPaymentMethodId,
+      phoneNumber,
       error: errorPayload(err),
     });
     return { ok: false, error: errorPayload(err) };

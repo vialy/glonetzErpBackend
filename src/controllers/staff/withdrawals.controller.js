@@ -74,6 +74,7 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
     pm = await neeroAdapter.resolvePaymentMethodId({
       provider: value.provider,
       phoneNumber: value.phoneNumber,
+      forceRefresh: value.provider === 'neero',
     });
     if (!pm.ok) {
       await notifier.notify(NOTIFICATION_EVENTS.GATEWAY_ERROR, {
@@ -96,6 +97,7 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
     phoneNumber: value.phoneNumber,
     holderName: value.holderName,
     displayLabel,
+    neeroPaymentMethodId: pm?.paymentMethodId || undefined,
   };
 
   if (requiresOtp) {
@@ -404,6 +406,7 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
       currencyCode: companyAccount.currencyCode,
       phoneNumber: wa.phoneNumber,
       provider: wa.provider,
+      destinationPaymentMethodId: wa.neeroPaymentMethodId || undefined,
       mchTransactionRef: withdrawal.withdrawalId,
       simulateOutcome: req.headers['x-simulate-outcome'],
     });

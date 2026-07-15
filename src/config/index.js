@@ -271,6 +271,7 @@ const config = {
     neero: {
       baseUrl: env('NEERO_BASE_URL', 'https://api.neero.tech/payment-gateway'),
       secretKey: env('NEERO_SECRET_KEY'),
+      merchantKey: env('NEERO_MERCHANT_KEY'),
       merchantPmId: env('NEERO_MERCHANT_PM_ID'),
       webhookSecret: env('NEERO_WEBHOOK_SECRET'),
       // Merchant context used when creating a NEERO-type payment method
