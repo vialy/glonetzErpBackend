@@ -135,12 +135,17 @@ async function fetchPaymentMethodById(paymentMethodId) {
 
 /**
  * Resolve the merchant source payment method for cash-in / cash-out.
- * Mirrors NeeroDriver.php: POST NEERO_MERCHANT when merchantKey is configured,
- * otherwise fall back to the static NEERO_MERCHANT_PM_ID from env.
+ *
+ * Prefer NEERO_MERCHANT_PM_ID — the same account learner cash-ins credit.
+ * Only create a dynamic NEERO_MERCHANT when the static id is not configured.
  */
 async function resolveMerchantSourcePaymentMethod() {
   const cfg = config.gateways.neero;
   const { merchantKey, storeId, balanceId, operatorId, merchantPmId } = cfg;
+
+  if (merchantPmId) {
+    return { ok: true, paymentMethodId: merchantPmId, fromCache: true, source: 'static' };
+  }
 
   if (merchantKey && storeId && balanceId && operatorId != null) {
     try {
@@ -158,14 +163,10 @@ async function resolveMerchantSourcePaymentMethod() {
       if (!paymentMethodId) {
         return { ok: false, error: 'merchant_pm_missing_id', raw: data };
       }
-      return { ok: true, paymentMethodId, fromCache: false };
+      return { ok: true, paymentMethodId, fromCache: false, source: 'dynamic' };
     } catch (err) {
       return { ok: false, error: errorPayload(err) };
     }
-  }
-
-  if (merchantPmId) {
-    return { ok: true, paymentMethodId: merchantPmId, fromCache: true };
   }
 
   return { ok: false, error: 'Neero merchant payment method id not configured' };
@@ -222,8 +223,11 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     return { ok: false, error: 'phoneNumber is required to resolve a Neero payment method' };
   }
 
+  const cachePhone =
+    provider === 'neero' ? stripCountryCode(phoneNumber, countryIso) : String(phoneNumber).trim();
+
   if (!forceRefresh) {
-    const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
+    const cached = await NeeroPaymentMethod.findOne({ phoneNumber: cachePhone, provider });
     if (cached) {
       let shortInfo = cached.shortInfo || null;
       if (!shortInfo && cached.neeroPaymentMethodId) {
@@ -248,7 +252,7 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
       type: 'NEERO_PERSON',
       personDetailsWithPhoneNumber: {
         countryCode: countryIso,
-        phoneNumber: stripCountryCode(phoneNumber, countryIso),
+        phoneNumber: cachePhone,
       },
     };
   } else {
@@ -274,8 +278,8 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     }
 
     await NeeroPaymentMethod.findOneAndUpdate(
-      { phoneNumber, provider },
-      { phoneNumber, provider, neeroPaymentMethodId, countryIso, shortInfo },
+      { phoneNumber: cachePhone, provider },
+      { phoneNumber: cachePhone, provider, neeroPaymentMethodId, countryIso, shortInfo },
       { upsert: true, new: true }
     );
 
@@ -383,17 +387,15 @@ export async function initiateWithdrawal({
   const merchant = await resolveMerchantSourcePaymentMethod();
   if (!merchant.ok) return merchant;
 
-  let destinationPaymentMethodId = destinationOverride || null;
-  if (!destinationPaymentMethodId) {
-    const pm = await resolvePaymentMethodId({
-      phoneNumber,
-      provider,
-      countryIso,
-      forceRefresh: provider === 'neero',
-    });
-    if (!pm.ok) return pm;
-    destinationPaymentMethodId = pm.paymentMethodId;
-  }
+  // Neero person: always re-resolve destination (never reuse a stale WDA id).
+  const pm = await resolvePaymentMethodId({
+    phoneNumber,
+    provider,
+    countryIso,
+    forceRefresh: provider === 'neero',
+  });
+  if (!pm.ok) return pm;
+  const destinationPaymentMethodId = pm.paymentMethodId;
 
   try {
     const res = await client().post('/api/v1/transaction-intents/cash-out', {
@@ -427,7 +429,8 @@ export async function initiateWithdrawal({
       paymentType,
       amount,
       provider,
-      sourcePaymentMethodId: merchant?.paymentMethodId,
+      merchantSource: merchant.source,
+      sourcePaymentMethodId: merchant.paymentMethodId,
       destinationPaymentMethodId,
       phoneNumber,
       error: errorPayload(err),
