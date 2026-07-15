@@ -20,6 +20,7 @@ const neeroPaymentMethodSchema = new Schema(
     provider: { type: String, required: true, lowercase: true, trim: true }, // 'mtn' | 'orange' | 'neero'
     countryIso: { type: String, default: 'CM', uppercase: true },
     neeroPaymentMethodId: { type: String, required: true },
+    shortInfo: { type: String },
   },
   { timestamps: true }
 );

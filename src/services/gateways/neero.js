@@ -29,6 +29,19 @@ import config from '../../config/index.js';
 
 const NAME = 'neero';
 
+const COUNTRY_DIAL_CODES = { CM: '+237' };
+
+/**
+ * Neero NEERO_PERSON expects the local number (e.g. 677123456) with
+ * countryCode set separately — not the full E.164 prefix.
+ */
+function stripCountryCode(phoneNumber, countryIso = 'CM') {
+  const code = COUNTRY_DIAL_CODES[countryIso];
+  const raw = String(phoneNumber || '').trim();
+  if (!code) return raw;
+  return raw.startsWith(code) ? raw.slice(code.length).replace(/^\s+/, '') : raw;
+}
+
 const PROVIDER_TO_NEERO = {
   mtn: 'MTN_MONEY',
   orange: 'ORANGE_MONEY',
@@ -116,7 +129,7 @@ function extractIntent(obj) {
  * Cache miss → POST /api/v1/payment-methods, persist the response, return id.
  * Returns { ok, paymentMethodId, fromCache } or { ok: false, error }.
  */
-async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM' }) {
+async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM', forceRefresh = false }) {
   // Lazy-import to avoid circular dependencies at module load time
   const { default: NeeroPaymentMethod } = await import('../../models/NeeroPaymentMethod.js');
 
@@ -124,17 +137,26 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     return { ok: false, error: 'phoneNumber is required to resolve a Neero payment method' };
   }
 
-  const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
-  if (cached) {
-    return { ok: true, paymentMethodId: cached.neeroPaymentMethodId, fromCache: true };
+  if (!forceRefresh) {
+    const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
+    if (cached) {
+      return {
+        ok: true,
+        paymentMethodId: cached.neeroPaymentMethodId,
+        shortInfo: cached.shortInfo || null,
+        fromCache: true,
+      };
+    }
   }
 
   let body;
   if (provider === 'neero') {
-    // Personal Neero account — Neero looks the account up by phone.
     body = {
       type: 'NEERO_PERSON',
-      personDetailsWithPhoneNumber: { countryCode: countryIso, phoneNumber },
+      personDetailsWithPhoneNumber: {
+        countryCode: countryIso,
+        phoneNumber: stripCountryCode(phoneNumber, countryIso),
+      },
     };
   } else {
     const mobileMoneyProvider = PROVIDER_TO_NEERO[provider];
@@ -151,14 +173,15 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     const res = await client().post('/api/v1/payment-methods', body);
     const data = unwrap(res);
     const neeroPaymentMethodId = data.id || data.paymentMethodId;
+    const shortInfo = data.shortInfo || null;
 
     await NeeroPaymentMethod.findOneAndUpdate(
       { phoneNumber, provider },
-      { phoneNumber, provider, neeroPaymentMethodId, countryIso },
+      { phoneNumber, provider, neeroPaymentMethodId, countryIso, shortInfo },
       { upsert: true, new: true }
     );
 
-    return { ok: true, paymentMethodId: neeroPaymentMethodId, fromCache: false };
+    return { ok: true, paymentMethodId: neeroPaymentMethodId, shortInfo, fromCache: false };
   } catch (err) {
     return { ok: false, error: errorPayload(err) };
   }
@@ -193,7 +216,12 @@ export async function initiatePayment({
     return { ok: false, error: 'Neero merchant payment method id not configured' };
   }
 
-  const pm = await resolvePaymentMethodId({ phoneNumber, provider, countryIso });
+  const pm = await resolvePaymentMethodId({
+    phoneNumber,
+    provider,
+    countryIso,
+    forceRefresh: provider === 'neero',
+  });
   if (!pm.ok) return pm;
 
   try {
@@ -260,7 +288,12 @@ export async function initiateWithdrawal({
 
   // Resolve destination payment method id — every provider hits the local
   // (phoneNumber, provider) cache; on miss the right body shape is sent.
-  const pm = await resolvePaymentMethodId({ phoneNumber, provider, countryIso });
+  const pm = await resolvePaymentMethodId({
+    phoneNumber,
+    provider,
+    countryIso,
+    forceRefresh: provider === 'neero',
+  });
   if (!pm.ok) return pm;
   const destinationPaymentMethodId = pm.paymentMethodId;
 

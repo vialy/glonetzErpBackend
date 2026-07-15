@@ -81,6 +81,7 @@
   "withdrawal_account_not_found": "Compte de retrait introuvable.",
   "withdrawal_account_not_verified": "Ce compte de retrait n'est pas vérifié.",
   "withdrawal_account_deactivated": "Compte de retrait désactivé. Vous pouvez en enregistrer un nouveau.",
+  "withdrawal_account_already_active": "Vous avez déjà un compte de retrait actif pour ce fournisseur. Désactivez-le d'abord pour en enregistrer un nouveau.",
   "withdrawal_account_otp_not_applicable": "La vérification OTP ne s'applique pas à ce type de compte.",
   "withdrawal_account_phone_required": "Le numéro de téléphone est requis.",
   "withdrawal_initiated": "Le retrait a été initié.",

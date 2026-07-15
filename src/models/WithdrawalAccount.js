@@ -35,6 +35,7 @@ const withdrawalAccountSchema = new Schema(
     phoneNumber: { type: String, required: true, trim: true },
 
     holderName: { type: String, trim: true },
+    displayLabel: { type: String, trim: true },
     countryIso: { type: String, default: 'CM', uppercase: true },
 
     isVerified: { type: Boolean, default: false, index: true },

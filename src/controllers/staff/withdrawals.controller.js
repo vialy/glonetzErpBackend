@@ -56,12 +56,22 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
   const value = await addSchema.validateAsync(req.body);
   const requiresOtp = WITHDRAWAL_PROVIDERS_REQUIRING_OTP.includes(value.provider);
 
+  const existing = await WithdrawalAccount.findOne({
+    staffId: req.staff._id,
+    provider: value.provider,
+    isActive: true,
+  });
+  if (existing) {
+    return fail(res, req.$t('withdrawal_account_already_active'), ERROR_CODES.CONFLICT);
+  }
+
+  let pm = null;
   if (config.isProduction) {
     const neeroAdapter = gateways.getByName('neero');
     if (!neeroAdapter || typeof neeroAdapter.resolvePaymentMethodId !== 'function') {
       return fail(res, req.$t('gateway_unavailable'), ERROR_CODES.GATEWAY_UNAVAILABLE);
     }
-    const pm = await neeroAdapter.resolvePaymentMethodId({
+    pm = await neeroAdapter.resolvePaymentMethodId({
       provider: value.provider,
       phoneNumber: value.phoneNumber,
     });
@@ -75,11 +85,17 @@ const addWithdrawalAccount = asyncHandler(async (req, res) => {
     }
   }
 
+  const displayLabel =
+    (pm?.shortInfo && String(pm.shortInfo).trim()) ||
+    (value.holderName && String(value.holderName).trim()) ||
+    value.phoneNumber;
+
   const fields = {
     staffId: req.staff._id,
     provider: value.provider,
     phoneNumber: value.phoneNumber,
     holderName: value.holderName,
+    displayLabel,
   };
 
   if (requiresOtp) {
@@ -179,6 +195,21 @@ const verifyWithdrawalAccount = asyncHandler(async (req, res) => {
   account.otpExpiresAt = undefined;
   await account.save();
   return ok(res, { message: req.$t('withdrawal_account_verified') });
+});
+
+const deactivateWithdrawalAccount = asyncHandler(async (req, res) => {
+  const account = await WithdrawalAccount.findOne({
+    withdrawalAccountId: req.params.withdrawalAccountId,
+    staffId: req.staff._id,
+    isActive: true,
+  });
+  if (!account) {
+    return fail(res, req.$t('withdrawal_account_not_found'), ERROR_CODES.NOT_FOUND);
+  }
+
+  account.isActive = false;
+  await account.save();
+  return ok(res, { message: req.$t('withdrawal_account_deactivated') });
 });
 
 const resendOtp = asyncHandler(async (req, res) => {
@@ -461,6 +492,7 @@ export default {
   addWithdrawalAccount,
   verifyNeeroAccount,
   verifyWithdrawalAccount,
+  deactivateWithdrawalAccount,
   resendOtp,
   listWithdrawalAccounts,
   listForStaff,
