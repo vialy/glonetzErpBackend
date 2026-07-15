@@ -151,6 +151,7 @@ const verifyNeeroAccount = asyncHandler(async (req, res) => {
   const pm = await neeroAdapter.resolvePaymentMethodId({
     provider: 'neero',
     phoneNumber: value.phoneNumber,
+    forceRefresh: true,
   });
   if (!pm.ok) {
     return fail(
@@ -159,10 +160,12 @@ const verifyNeeroAccount = asyncHandler(async (req, res) => {
       ERROR_CODES.GATEWAY_ERROR
     );
   }
+  const displayName =
+    (pm.shortInfo && String(pm.shortInfo).trim()) || value.phoneNumber;
   return ok(res, {
     neeroAccount: {
       id: pm.paymentMethodId,
-      shortInfo: pm.shortInfo,
+      shortInfo: displayName,
       phoneNumber: value.phoneNumber,
     },
     message: req.$t('neero_account_verified'),

@@ -87,6 +87,46 @@ function errorPayload(err) {
 }
 
 /**
+ * Pull a human-readable label from a Neero payment-method payload.
+ * Neero may return `shortInfo` at the root or nested under person/mobile details.
+ */
+function extractShortInfo(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  const direct = data.shortInfo ?? data.short_info;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+  const person =
+    data.personDetailsWithPhoneNumber ??
+    data.personDetails ??
+    data.neeroPersonDetails;
+  if (person && typeof person === 'object') {
+    const parts = [person.firstName, person.lastName, person.fullName, person.name]
+      .filter((v) => typeof v === 'string' && v.trim())
+      .map((v) => v.trim());
+    if (parts.length) return parts.join(' ');
+  }
+
+  const mobile = data.mobileMoneyDetails;
+  if (mobile && typeof mobile === 'object') {
+    const holder = mobile.accountHolderName ?? mobile.holderName ?? mobile.name;
+    if (typeof holder === 'string' && holder.trim()) return holder.trim();
+  }
+
+  return null;
+}
+
+async function fetchPaymentMethodById(paymentMethodId) {
+  if (!paymentMethodId) return null;
+  try {
+    const res = await client().get(`/api/v1/payment-methods/${paymentMethodId}`);
+    return unwrap(res);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Normalize a Neero transaction-intent object (response body of POST cash-in /
  * cash-out and GET /transaction-intents/:id).
  *
@@ -140,10 +180,18 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
   if (!forceRefresh) {
     const cached = await NeeroPaymentMethod.findOne({ phoneNumber, provider });
     if (cached) {
+      let shortInfo = cached.shortInfo || null;
+      if (!shortInfo && cached.neeroPaymentMethodId) {
+        const details = await fetchPaymentMethodById(cached.neeroPaymentMethodId);
+        shortInfo = extractShortInfo(details);
+        if (shortInfo) {
+          await NeeroPaymentMethod.updateOne({ _id: cached._id }, { shortInfo });
+        }
+      }
       return {
         ok: true,
         paymentMethodId: cached.neeroPaymentMethodId,
-        shortInfo: cached.shortInfo || null,
+        shortInfo,
         fromCache: true,
       };
     }
@@ -173,7 +221,12 @@ async function resolvePaymentMethodId({ phoneNumber, provider, countryIso = 'CM'
     const res = await client().post('/api/v1/payment-methods', body);
     const data = unwrap(res);
     const neeroPaymentMethodId = data.id || data.paymentMethodId;
-    const shortInfo = data.shortInfo || null;
+    let shortInfo = extractShortInfo(data);
+
+    if (!shortInfo && neeroPaymentMethodId) {
+      const details = await fetchPaymentMethodById(neeroPaymentMethodId);
+      shortInfo = extractShortInfo(details);
+    }
 
     await NeeroPaymentMethod.findOneAndUpdate(
       { phoneNumber, provider },
