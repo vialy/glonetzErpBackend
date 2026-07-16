@@ -137,6 +137,7 @@
   "formation_certificate_revoked": "Training certificate revoked.",
   "formation_certificate_deleted": "Training certificate deleted.",
   "formation_certificate_signature_updated": "Signature saved.",
+  "formation_certificate_signatures_synced": "Signature updated on already generated training certificates.",
   "formation_training_not_finished": "Training is not finished yet.",
   "formation_certificate_not_available": "Certificate is not available yet.",
   "school_period_not_finished": "The current class school period is not finished. Promotion is blocked until the end date has passed.",

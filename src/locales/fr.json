@@ -137,6 +137,7 @@
   "formation_certificate_revoked": "Attestation de formation révoquée.",
   "formation_certificate_deleted": "Attestation de formation supprimée.",
   "formation_certificate_signature_updated": "Signature enregistrée.",
+  "formation_certificate_signatures_synced": "Signature mise à jour sur les attestations de formation déjà générées.",
   "formation_training_not_finished": "La formation n'est pas encore terminée.",
   "formation_certificate_not_available": "L'attestation n'est pas encore disponible.",
   "school_period_not_finished": "La scolarité de la classe actuelle n'est pas terminée. La promotion est impossible tant que la date de fin n'est pas passée.",

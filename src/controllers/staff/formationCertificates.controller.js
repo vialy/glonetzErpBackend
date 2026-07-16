@@ -378,6 +378,39 @@ const updateSignature = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * Nombre d'attestations de formation déjà générées (disponibles) —
+ * utilisées pour proposer une mise à jour de signature figée.
+ */
+const countGeneratedWithSignature = asyncHandler(async (_req, res) => {
+  const count = await Certificate.countDocuments({
+    certificateKind: CERTIFICATE_KINDS.FORMATION,
+    status: CERTIFICATE_STATUSES.DISPONIBLE,
+  });
+  return ok(res, { count });
+});
+
+/**
+ * Recopie la signature globale actuelle sur toutes les attestations
+ * de formation déjà générées (status disponible).
+ */
+const syncSignatureSnapshots = asyncHandler(async (req, res) => {
+  const template = await FormationCertificateTemplate.getSingleton();
+  const signatureImageUrl = template.signatureImageUrl ?? null;
+  const filter = {
+    certificateKind: CERTIFICATE_KINDS.FORMATION,
+    status: CERTIFICATE_STATUSES.DISPONIBLE,
+  };
+  const result = signatureImageUrl
+    ? await Certificate.updateMany(filter, { $set: { signatureSnapshotUrl: signatureImageUrl } })
+    : await Certificate.updateMany(filter, { $unset: { signatureSnapshotUrl: 1 } });
+
+  return ok(res, {
+    updatedCount: result.modifiedCount ?? 0,
+    message: req.$t('formation_certificate_signatures_synced'),
+  });
+});
+
 export default {
   list,
   getOne,
@@ -390,4 +423,6 @@ export default {
   downloadEligibility,
   getSignature,
   updateSignature,
+  countGeneratedWithSignature,
+  syncSignatureSnapshots,
 };

@@ -81,6 +81,8 @@ router.delete('/school-certificates/:certificateId', managerOrAbove(), schoolCer
 // Attestations de formation
 router.get('/certificates/signature', formationCertificates.getSignature);
 router.put('/certificates/signature', adminOnly(), formationCertificates.updateSignature);
+router.get('/certificates/signature/generated-count', formationCertificates.countGeneratedWithSignature);
+router.post('/certificates/signature/sync-snapshots', adminOnly(), formationCertificates.syncSignatureSnapshots);
 router.get('/certificates', formationCertificates.list);
 router.post('/certificates', managerOrAbove(), formationCertificates.create);
 router.get('/certificates/:certificateId/download-eligibility', formationCertificates.downloadEligibility);
