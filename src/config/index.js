@@ -274,6 +274,8 @@ const config = {
       merchantKey: env('NEERO_MERCHANT_KEY'),
       merchantPmId: env('NEERO_MERCHANT_PM_ID'),
       webhookSecret: env('NEERO_WEBHOOK_SECRET'),
+      // Required by Nexus on every cash-in / cash-out (Dashboard → Paramètres → Conformité).
+      platformCode: env('NEERO_PLATFORM_CODE'),
       // Merchant context used when creating a NEERO-type payment method
       // (cash-out destination for neero withdrawal accounts).
       storeId: env('NEERO_STORE_ID'),

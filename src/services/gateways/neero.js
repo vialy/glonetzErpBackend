@@ -12,14 +12,14 @@ import config from '../../config/index.js';
  *     1. Check NeeroPaymentMethod cache for existing paymentMethodId.
  *        If not cached → POST /api/v1/payment-methods → cache the result.
  *     2. POST /api/v1/transaction-intents/cash-in
- *          body: { amount, currencyCode, paymentType: "MERCHANT_COLLECTION",
+ *          body: { amount, currencyCode, platformCode, paymentType: "MERCHANT_COLLECTION",
  *                  sourcePaymentMethodId, destinationPaymentMethodId (env merchant id),
  *                  externalTransactionId, confirm: true }
  *
  *   Cash-Out (manager withdrawal):
  *     1. Check NeeroPaymentMethod cache → same flow.
  *     2. POST /api/v1/transaction-intents/cash-out
- *          body: { amount, currencyCode,
+ *          body: { amount, currencyCode, platformCode,
  *                  paymentType: "MTN_MONEY_TRANSFER" | "ORANGE_MONEY_TRANSFER"
  *                             | "TRANSFER_TO_NEERO_PERSON" (compte Neero personnel),
  *                  sourcePaymentMethodId (env merchant id),
@@ -91,6 +91,18 @@ function unwrap(res) {
 
 function errorPayload(err) {
   return err.response?.data || err.message;
+}
+
+/**
+ * Nexus requires platformCode on every cash-in / cash-out
+ * (Dashboard → Paramètres → Conformité, ex. pltf_29Xk7Q).
+ */
+function requirePlatformCode() {
+  const platformCode = config.gateways.neero.platformCode;
+  if (!platformCode) {
+    return { ok: false, error: 'Neero platformCode not configured (NEERO_PLATFORM_CODE)' };
+  }
+  return { ok: true, platformCode };
 }
 
 /**
@@ -318,6 +330,9 @@ export async function initiatePayment({
     return { ok: false, error: 'Neero merchant payment method id not configured' };
   }
 
+  const platform = requirePlatformCode();
+  if (!platform.ok) return platform;
+
   const pm = await resolvePaymentMethodId({
     phoneNumber,
     provider,
@@ -330,6 +345,7 @@ export async function initiatePayment({
     const res = await client().post('/api/v1/transaction-intents/cash-in', {
       amount,
       currencyCode,
+      platformCode: platform.platformCode,
       paymentType: 'MERCHANT_COLLECTION',
       sourcePaymentMethodId: pm.paymentMethodId,
       destinationPaymentMethodId: merchantPmId,
@@ -384,6 +400,9 @@ export async function initiateWithdrawal({
     return { ok: false, error: `Unsupported withdrawal provider: ${provider}` };
   }
 
+  const platform = requirePlatformCode();
+  if (!platform.ok) return platform;
+
   const merchant = await resolveMerchantSourcePaymentMethod();
   if (!merchant.ok) return merchant;
 
@@ -398,18 +417,27 @@ export async function initiateWithdrawal({
   const destinationPaymentMethodId = pm.paymentMethodId;
 
   try {
-    const res = await client().post('/api/v1/transaction-intents/cash-out', {
-      amount,
-      currencyCode,
-      paymentType,
-      sourcePaymentMethodId: merchant.paymentMethodId,
-      destinationPaymentMethodId,
-      externalTransactionId: mchTransactionRef,
-      confirm: true,
-      metadata: {
-        merchant_reference: mchTransactionRef,
+    const res = await client().post(
+      '/api/v1/transaction-intents/cash-out',
+      {
+        amount,
+        currencyCode,
+        platformCode: platform.platformCode,
+        paymentType,
+        sourcePaymentMethodId: merchant.paymentMethodId,
+        destinationPaymentMethodId,
+        externalTransactionId: mchTransactionRef,
+        confirm: true,
+        metadata: {
+          merchant_reference: mchTransactionRef,
+        },
       },
-    });
+      {
+        headers: mchTransactionRef
+          ? { 'X-IDEMPOTENCY-KEY': String(mchTransactionRef) }
+          : undefined,
+      },
+    );
     const data = unwrap(res);
     const intent = extractIntent(data) || {};
     return {

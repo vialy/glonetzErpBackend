@@ -185,7 +185,7 @@ Implemented from the Neero Postman collection:
 - `POST /api/v1/payment-methods` to create a MoMo (MTN / Orange) `MOBILE_MONEY` payment method per phone number. The merchant `NEERO_MERCHANT` payment method id is created once in the dashboard and stored in `NEERO_MERCHANT_PM_ID`.
 - `POST /api/v1/transaction-intents/cash-in` to collect (paymentType `MERCHANT_COLLECTION`).
 - `POST /api/v1/transaction-intents/cash-out` to pay out (`MTN_MONEY_TRANSFER`, `ORANGE_MONEY_TRANSFER`, or `TRANSFER_TO_NEERO_PERSON` for personal Neero accounts).
-- Both intents are created with `confirm: true` and `externalTransactionId` set to our internal reference.
+- Both intents require `platformCode` (`NEERO_PLATFORM_CODE`, from Nexus Dashboard → Paramètres → Conformité) plus `confirm: true` and `externalTransactionId`.
 - `GET  /api/v1/transaction-intents/:id` to verify.
 
 ## Accounting
