@@ -46,15 +46,26 @@ const create = asyncHandler(async (req, res) => {
     proofUrl: publicUrlFor(req.file.filename),
   });
 
+  const learnerLabel = req.user.name?.trim() || req.user.userId;
+  const paymentDateLabel = new Date(claim.paymentDate).toLocaleDateString('fr-FR');
+  const amountLabel = `${Number(claim.amount).toLocaleString('fr-FR')} ${claim.currencyCode}`;
+
   notifier.notify(NOTIFICATION_EVENTS.CLAIM_REPORTED, {
-    subject: `New claim reported — ${claim.claimId}`,
-    body: `User ${req.user.userId} reported a claim for ${claim.amount} ${claim.currencyCode} against ${claim.paymentId}.`,
-    meta: {
-      claimId: claim.claimId,
-      userId: req.user.userId,
-      paymentId: claim.paymentId,
-      paymentDate: claim.paymentDate,
-    },
+    subject: `Nouvelle réclamation — ${claim.claimId}`,
+    body: [
+      'Un apprenant a soumis une réclamation de paiement.',
+      '',
+      `Apprenant : ${learnerLabel} (${req.user.userId})`,
+      `Réclamation : ${claim.claimId}`,
+      `Paiement concerné : ${claim.paymentId}`,
+      `Montant : ${amountLabel}`,
+      `Date déclarée du paiement : ${paymentDateLabel}`,
+      value.description?.trim() ? `Commentaire : ${value.description.trim()}` : null,
+      '',
+      'Connectez-vous à l’espace staff (section Réclamations) pour valider ou rejeter cette demande.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   });
 
   return ok(res, { claim, message: req.$t('claim_submitted') });

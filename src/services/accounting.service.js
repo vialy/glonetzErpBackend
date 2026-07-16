@@ -168,6 +168,88 @@ export async function transfer({
 }
 
 /**
+ * Move funds between treasury accounts (company or virtual).
+ * Used by admin to rebalance internal ledgers without creating expenses.
+ */
+export async function treasuryTransfer({
+  staffId,
+  fromAccount,
+  toAccount,
+  amount,
+  description,
+}) {
+  if (amount <= 0) {
+    const err = new Error('validation_error');
+    err.code = 'validation_error';
+    throw err;
+  }
+  if (fromAccount._id.equals(toAccount._id)) {
+    const err = new Error('validation_error');
+    err.code = 'validation_error';
+    throw err;
+  }
+  const currencyCode = fromAccount.currencyCode || toAccount.currencyCode;
+  const transferFriendlyId = generateFriendlyId('transfer');
+
+  return withSession(async (session) => {
+    const sessOpt = session ? { session } : {};
+
+    const debitOpening = fromAccount.balance;
+    const debited = await Account.applyDelta(fromAccount._id, -amount, session);
+
+    const creditOpening = toAccount.balance;
+    const credited = await Account.applyDelta(toAccount._id, amount, session);
+
+    const payerTx = new Transaction({
+      accountId: fromAccount._id,
+      accountFriendlyId: fromAccount.accountId,
+      userId: staffId,
+      beneficiaryAccountId: toAccount._id,
+      beneficiaryAccountFriendlyId: toAccount.accountId,
+      type: TRANSACTION_TYPES.DEBIT,
+      source: TRANSACTION_SOURCES.TRANSFER,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: debitOpening,
+      closingBalance: debited.balance,
+      description,
+      transferId: transferFriendlyId,
+    });
+
+    const beneficiaryTx = new Transaction({
+      accountId: toAccount._id,
+      accountFriendlyId: toAccount.accountId,
+      userId: staffId,
+      beneficiaryAccountId: fromAccount._id,
+      beneficiaryAccountFriendlyId: fromAccount.accountId,
+      type: TRANSACTION_TYPES.CREDIT,
+      source: TRANSACTION_SOURCES.TRANSFER,
+      amount,
+      fee: 0,
+      totalAmount: amount,
+      currencyCode,
+      openingBalance: creditOpening,
+      closingBalance: credited.balance,
+      description,
+      transferId: transferFriendlyId,
+    });
+
+    await payerTx.save(sessOpt);
+    await beneficiaryTx.save(sessOpt);
+
+    return {
+      transferId: transferFriendlyId,
+      payerTransaction: payerTx,
+      beneficiaryTransaction: beneficiaryTx,
+      fromAccount: debited,
+      toAccount: credited,
+    };
+  });
+}
+
+/**
  * Reserve funds for a withdrawal — debits the staff's account and creates a
  * pending withdrawal transaction. If the gateway later fails, the caller
  * should call `refundWithdrawal` to restore the balance.
@@ -605,6 +687,7 @@ export async function settleAdminWithdrawal({
 export default {
   creditCompanyForPayment,
   transfer,
+  treasuryTransfer,
   debitForWithdrawal,
   refundWithdrawal,
   debitCompanyCreditStaff,

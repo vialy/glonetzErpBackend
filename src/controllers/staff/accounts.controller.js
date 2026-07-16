@@ -299,6 +299,58 @@ const transfer = asyncHandler(async (req, res) => {
   return ok(res, { ...result, message: req.$t('transfer_completed') });
 });
 
+const treasuryTransferSchema = Joi.object({
+  fromAccountId: Joi.string().required(),
+  toAccountId: Joi.string().required(),
+  amount: Joi.number().min(1).required(),
+  description: Joi.string().min(1).max(500).required(),
+});
+
+/**
+ * POST /staff/accounts/treasury-transfer
+ *
+ * Admin-only paired transfer between company and virtual treasury accounts.
+ */
+const treasuryTransfer = asyncHandler(async (req, res) => {
+  const value = await treasuryTransferSchema.validateAsync(req.body);
+  if (value.fromAccountId === value.toAccountId) {
+    return fail(res, req.$t('treasury_transfer_same_account'), ERROR_CODES.VALIDATION);
+  }
+
+  const fromAccount = await Account.findByFriendlyId(value.fromAccountId);
+  const toAccount = await Account.findByFriendlyId(value.toAccountId);
+  if (!fromAccount || !toAccount) {
+    return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
+  }
+  for (const account of [fromAccount, toAccount]) {
+    if (account.type === 'staff') {
+      return fail(res, req.$t('account_not_adjustable'), ERROR_CODES.FORBIDDEN);
+    }
+    if (!account.isActive) {
+      return fail(res, req.$t('account_inactive'), ERROR_CODES.FORBIDDEN);
+    }
+  }
+  if (fromAccount.currencyCode !== toAccount.currencyCode) {
+    return fail(res, req.$t('treasury_transfer_currency_mismatch'), ERROR_CODES.VALIDATION);
+  }
+
+  try {
+    const result = await accounting.treasuryTransfer({
+      staffId: req.staff._id,
+      fromAccount,
+      toAccount,
+      amount: value.amount,
+      description: value.description.trim(),
+    });
+    return ok(res, { ...result, message: req.$t('treasury_transfer_completed') });
+  } catch (err) {
+    if (err.code === 'insufficient_funds') {
+      return fail(res, req.$t('insufficient_funds'), ERROR_CODES.INSUFFICIENT_FUNDS);
+    }
+    throw err;
+  }
+});
+
 // ===== Virtual accounts (admin book-keeping) =====
 
 /**
@@ -411,6 +463,7 @@ export default {
   neeroBalance,
   listAll,
   transfer,
+  treasuryTransfer,
   createVirtual,
   updateVirtual,
   getOne,

@@ -70,6 +70,10 @@
   "virtual_account_updated": "Virtual account updated.",
   "insufficient_funds": "Insufficient funds.",
   "transfer_completed": "Transfer completed.",
+  "treasury_transfer_completed": "Treasury transfer completed.",
+  "treasury_transfer_same_account": "Source and destination accounts must be different.",
+  "treasury_transfer_currency_mismatch": "Both accounts must use the same currency.",
+  "account_inactive": "This account is inactive.",
   "only_admin_can_transfer_from_main": "Only administrators can transfer from the main account.",
   "admin_cannot_withdraw": "Administrators cannot withdraw funds to a mobile money account.",
 

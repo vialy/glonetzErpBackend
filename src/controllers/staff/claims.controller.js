@@ -1,12 +1,14 @@
 import Joi from 'joi';
 
-import { Claim, Payment } from '../../models/index.js';
+import { Account, Claim, Payment, Transaction } from '../../models/index.js';
+import accounting from '../../services/accounting.service.js';
 import { ok, fail, asyncHandler } from '../../utils/response.js';
 import { readPagination } from '../../utils/pagination.js';
 import {
   ERROR_CODES,
   CLAIM_STATUSES,
   PAYMENT_STATUSES,
+  TRANSACTION_SOURCES,
 } from '../../config/index.js';
 
 const list = asyncHandler(async (req, res) => {
@@ -65,6 +67,24 @@ const resolve = asyncHandler(async (req, res) => {
   claim.resolvedAt = new Date();
   claim.resolutionNote = value.resolutionNote;
   await claim.save();
+
+  if (newPaymentStatus === PAYMENT_STATUSES.SUCCESSFUL) {
+    const companyAccount = await Account.findDefaultCompany();
+    if (companyAccount) {
+      const alreadyCredited = await Transaction.findOne({
+        paymentFriendlyId: payment.paymentId,
+        source: TRANSACTION_SOURCES.PAYMENT,
+      });
+      if (!alreadyCredited) {
+        await accounting.creditCompanyForPayment({
+          companyAccount,
+          amount: payment.amount,
+          currencyCode: payment.currencyCode,
+          payment,
+        });
+      }
+    }
+  }
 
   return ok(res, { claim, payment, message: req.$t('claim_resolved') });
 });

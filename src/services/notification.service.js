@@ -7,20 +7,13 @@ import config from '../config/index.js';
  * event. Failures are swallowed so that the caller's flow never breaks
  * because we couldn't reach the SMTP server.
  */
-export async function notify(event, { subject, body, meta }) {
+export async function notify(event, { subject, body }) {
   try {
     const settings = await Setting.getSingleton();
     const recipients = settings.notificationEmails || [];
     if (recipients.length === 0) return;
     const fullSubject = `[${config.appName}] ${subject}`;
-    const fullBody = [
-      body,
-      '',
-      meta ? '---' : '',
-      meta ? JSON.stringify(meta, null, 2) : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const fullBody = body;
     await Promise.all(
       recipients.map((to) => emailService.sendNotification({ to, subject: fullSubject, body: fullBody }))
     );

@@ -103,6 +103,7 @@ router.get('/accounts/totals', adminOnly(), accounts.totals);
 router.get('/accounts/neero-balance', adminOnly(), accounts.neeroBalance);
 router.get('/accounts', adminOnly(), accounts.listAll);
 router.post('/accounts/transfer', accounts.transfer);
+router.post('/accounts/treasury-transfer', adminOnly(), accounts.treasuryTransfer);
 
 // Virtual (book-keeping) accounts — admin only for create/update.
 router.post('/accounts/virtual', adminOnly(), accounts.createVirtual);
