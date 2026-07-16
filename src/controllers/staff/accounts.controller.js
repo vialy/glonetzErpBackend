@@ -32,12 +32,25 @@ const myAccount = asyncHandler(async (req, res) => {
   return ok(res, { account });
 });
 
+function parseStatementBound(value, endOfDay) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  // Date-only strings (yyyy-mm-dd) must cover the full inclusive day.
+  if (endOfDay && String(value).length <= 10) {
+    date.setHours(23, 59, 59, 999);
+  }
+  return date;
+}
+
 async function paginateAccountStatement(account, { from, to, page, limit }) {
   const filter = { accountId: account._id };
   if (from || to) {
     filter.createdAt = {};
-    if (from) filter.createdAt.$gte = new Date(from);
-    if (to) filter.createdAt.$lte = new Date(to);
+    const fromDate = parseStatementBound(from, false);
+    const toDate = parseStatementBound(to, true);
+    if (fromDate) filter.createdAt.$gte = fromDate;
+    if (toDate) filter.createdAt.$lte = toDate;
   }
   return Transaction.paginate(filter, { page, limit, sort: '-createdAt' });
 }
@@ -59,17 +72,14 @@ const statement = asyncHandler(async (req, res) => {
 /**
  * GET /staff/accounts/:accountId/statement
  *
- * Admin-only statement for a specific company or virtual account.
- * Used by the treasury wallets screen to show history per wallet.
+ * Admin-only statement for any account (company, virtual, or staff).
+ * Used by treasury wallets and admin financial reports (e.g. manager budget).
  */
 const statementByAccount = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const { page, limit } = readPagination(req);
   const account = await Account.findByFriendlyId(req.params.accountId);
   if (!account) return fail(res, req.$t('account_not_found'), ERROR_CODES.NOT_FOUND);
-  if (account.type === 'staff') {
-    return fail(res, req.$t('account_not_adjustable'), ERROR_CODES.FORBIDDEN);
-  }
   const result = await paginateAccountStatement(account, { from, to, page, limit });
   return ok(res, { account, ...result });
 });
