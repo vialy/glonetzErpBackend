@@ -13,8 +13,34 @@ import paymentTransferService from '../../services/paymentTransfer.service.js';
 import userDeletionService from '../../services/userDeletion.service.js';
 import schoolCertificateService from '../../services/schoolCertificate.service.js';
 
+function localYmd(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Date de naissance strictement antérieure à aujourd'hui (calendrier local). */
+function assertDobBeforeToday(value, helpers) {
+  // Les dates ISO « date-only » doivent rester en YYYY-MM-DD (évite les décalages TZ).
+  const raw =
+    value instanceof Date
+      ? value.toISOString().slice(0, 10)
+      : String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return helpers.error('any.invalid');
+  }
+  if (raw >= localYmd()) {
+    return helpers.error('date.less');
+  }
+  return value;
+}
+
 const dateOfBirthField = Joi.alternatives()
-  .try(Joi.date().iso().max('now'), Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
+  .try(
+    Joi.date().iso().custom(assertDobBeforeToday),
+    Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).custom(assertDobBeforeToday),
+  )
   .allow(null, '');
 
 const placeOfBirthField = Joi.string().max(120).trim().allow(null, '');
@@ -246,7 +272,7 @@ const bulkCreate = asyncHandler(async (req, res) => {
         }
       }
 
-      const plainPassword = generateRandomPassword(10);
+      const plainPassword = generateRandomPassword(8);
       const user = await User.createWithPassword({
         name: row.name,
         email: row.email || undefined,
