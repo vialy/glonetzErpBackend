@@ -11,3 +11,4 @@ export { default as Setting } from './Setting.js';
 export { default as NeeroPaymentMethod } from './NeeroPaymentMethod.js';
 export { default as Expense } from './Expense.js';
 export { default as ClassEnrollment } from './ClassEnrollment.js';
+export { default as ApiLog } from './ApiLog.js';

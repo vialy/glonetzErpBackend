@@ -1025,6 +1025,43 @@
       ]
     },
     {
+      "name": "Staff › API logs",
+      "item": [
+        {
+          "name": "List API logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/api-logs?pageNum=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "staff", "api-logs"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "provider", "value": "neero", "disabled": true },
+                { "key": "method", "value": "POST", "disabled": true },
+                { "key": "status", "value": "500", "disabled": true, "description": "Single HTTP status, or comma-separated (`500,502`)." },
+                { "key": "minStatus", "value": "400", "disabled": true, "description": "Match responseStatus >= this. Handy for `only errors`." },
+                { "key": "url", "value": "cash-out", "disabled": true, "description": "Case-insensitive substring match on the URL." },
+                { "key": "from", "value": "", "disabled": true },
+                { "key": "to", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Audit trail of every outbound third-party call (currently Neero). 30-day retention via TTL. Authorization headers are redacted before persistence. Any authenticated staff can browse."
+          }
+        },
+        {
+          "name": "Get API log",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/staff/api-logs/{{apiLogId}}", "host": ["{{baseUrl}}"], "path": ["api", "staff", "api-logs", "{{apiLogId}}"] }
+          }
+        }
+      ]
+    },
+    {
       "name": "User › Auth",
       "item": [
         {

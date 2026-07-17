@@ -370,6 +370,46 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
     withdrawalFriendlyId: withdrawal.withdrawalId,
   });
 
+  /**
+   * Reverse the ledger legs from `debitCompanyCreditStaff` when the gateway
+   * fails for any reason (thrown or a synchronous non-success status). We
+   * wrap the refund itself in try/catch so a refund failure never leaves
+   * the caller without a response — we still mark the Withdrawal as FAILED
+   * and notify the ops emails so a human can reconcile.
+   */
+  async function refundAndFail(reason, meta = {}) {
+    try {
+      const refreshedCompany = await Account.findById(companyAccount._id);
+      const refreshedStaff = await Account.findById(beneficiaryAccount._id);
+      await accounting.refundCompanyDebitStaff({
+        companyAccount: refreshedCompany,
+        beneficiaryStaffId: beneficiary._id,
+        beneficiaryAccount: refreshedStaff,
+        amount: value.amount,
+        currencyCode: refreshedCompany.currencyCode,
+        withdrawalFriendlyId: withdrawal.withdrawalId,
+        reason,
+      });
+      withdrawal.failureReason = reason;
+    } catch (refundErr) {
+      // Log both errors, mark the record and notify ops — do NOT re-throw.
+      // eslint-disable-next-line no-console
+      console.error(
+        `[withdrawal] refund FAILED for ${withdrawal.withdrawalId} after gateway failure "${reason}":`,
+        refundErr && refundErr.message ? refundErr.message : refundErr
+      );
+      withdrawal.failureReason =
+        `${reason} | refund_failed: ${refundErr && refundErr.message ? refundErr.message : String(refundErr)}`;
+    }
+    withdrawal.status = WITHDRAWAL_STATUSES.FAILED;
+    try { await withdrawal.save(); } catch (_) { /* best effort */ }
+    await notifier.notify(NOTIFICATION_EVENTS.WITHDRAWAL_FAILED, {
+      subject: `Withdrawal failed — ${withdrawal.withdrawalId}`,
+      body: 'Withdrawal failed during initiation. Ledger refund was attempted; check logs.',
+      meta: { withdrawalId: withdrawal.withdrawalId, reason, ...meta },
+    });
+  }
+
   // Step 3 — fire the actual cash-out via the active gateway
   try {
     const { adapter, result } = await gateways.initiateWithdrawalViaActive({
@@ -401,30 +441,29 @@ const initiateWithdrawal = asyncHandler(async (req, res) => {
         withdrawalFriendlyId: withdrawal.withdrawalId,
         description: `Cash-out ${withdrawal.withdrawalId} settled`,
       });
+      await withdrawal.save();
+      return ok(res, { withdrawal, message: req.$t('withdrawal_initiated') });
     }
+
+    // Synchronous non-success: Neero replied 2xx but the intent was
+    // FAILED / CANCELLED. Refund immediately — waiting for a webhook that
+    // may never arrive would leave staff and company balances desynced.
+    if (result.status === 'failed' || result.status === 'cancelled') {
+      await refundAndFail(`gateway_${result.status}`, {
+        neeroStatus: result.status,
+        reference: result.reference,
+      });
+      return ok(res, { withdrawal, message: req.$t('withdrawal_failed') });
+    }
+
+    // PENDING (async settlement) — persist as PENDING and let the webhook
+    // handler settle or refund later. Ledger stays credited on staff side
+    // for now, which is intentional (the money is in-flight).
     await withdrawal.save();
     return ok(res, { withdrawal, message: req.$t('withdrawal_initiated') });
   } catch (err) {
-    // Gateway failed → reverse the staff credit AND the company debit.
-    const refreshedCompany = await Account.findById(companyAccount._id);
-    const refreshedStaff = await Account.findById(beneficiaryAccount._id);
-    await accounting.refundCompanyDebitStaff({
-      companyAccount: refreshedCompany,
-      beneficiaryStaffId: beneficiary._id,
-      beneficiaryAccount: refreshedStaff,
-      amount: value.amount,
-      currencyCode: refreshedCompany.currencyCode,
-      withdrawalFriendlyId: withdrawal.withdrawalId,
-      reason: err.detail ? JSON.stringify(err.detail) : err.message,
-    });
-    withdrawal.status = WITHDRAWAL_STATUSES.FAILED;
-    withdrawal.failureReason = err.detail ? JSON.stringify(err.detail) : err.message;
-    await withdrawal.save();
-    notifier.notify(NOTIFICATION_EVENTS.WITHDRAWAL_FAILED, {
-      subject: `Withdrawal failed — ${withdrawal.withdrawalId}`,
-      body: 'Withdrawal failed during initiation. Company and staff balances were restored.',
-      meta: { withdrawalId: withdrawal.withdrawalId, error: err.detail || err.message },
-    });
+    const reason = err.detail ? JSON.stringify(err.detail) : err.message;
+    await refundAndFail(reason, { error: err.detail || err.message });
     throw err;
   }
 });

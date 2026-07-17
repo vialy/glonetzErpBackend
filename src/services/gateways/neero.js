@@ -78,8 +78,32 @@ function authHeader() {
   return `Basic ${b64}`;
 }
 
+/**
+ * Fire-and-forget insert into the ApiLog collection. Lazy-imported to keep
+ * this module free of the mongoose dependency at load time (matters for
+ * unit tests / scripts that pull in the adapter without a DB).
+ *
+ * Never throws; a log failure must not affect the request flow.
+ */
+function logApiCall(entry) {
+  (async () => {
+    try {
+      const { default: ApiLog } = await import('../../models/ApiLog.js');
+      await ApiLog.create(entry);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[api-log] failed to persist:', err && err.message ? err.message : err);
+    }
+  })();
+}
+
+/**
+ * axios instance with interceptors that capture every outbound Neero call
+ * to the ApiLog collection. The Authorization header is stripped before
+ * persistence — we log intent + payload, never credentials.
+ */
 function client() {
-  return axios.create({
+  const instance = axios.create({
     baseURL: config.gateways.neero.baseUrl,
     headers: {
       Authorization: authHeader(),
@@ -87,6 +111,40 @@ function client() {
     },
     timeout: 30000,
   });
+
+  instance.interceptors.request.use((cfg) => {
+    // eslint-disable-next-line no-underscore-dangle
+    cfg.metadata = { start: Date.now() };
+    return cfg;
+  });
+
+  const persist = (cfg, res, err) => {
+    const method = (cfg?.method || 'GET').toUpperCase();
+    const url = `${cfg?.baseURL || ''}${cfg?.url || ''}`;
+    // Redact the Authorization header before writing to the log
+    const rawHeaders = { ...(cfg?.headers || {}) };
+    if (rawHeaders.Authorization) rawHeaders.Authorization = '[redacted]';
+    if (rawHeaders.authorization) rawHeaders.authorization = '[redacted]';
+
+    logApiCall({
+      provider: 'neero',
+      method,
+      url,
+      requestBody: method === 'GET' || method === 'HEAD' ? undefined : cfg?.data,
+      requestHeaders: rawHeaders,
+      responseStatus: res?.status ?? err?.response?.status,
+      responseBody: res?.data ?? err?.response?.data,
+      durationMs: cfg?.metadata?.start ? Date.now() - cfg.metadata.start : undefined,
+      error: err ? (err.message || String(err)) : undefined,
+    });
+  };
+
+  instance.interceptors.response.use(
+    (res) => { persist(res.config, res, null); return res; },
+    (err) => { persist(err.config || {}, null, err); return Promise.reject(err); }
+  );
+
+  return instance;
 }
 
 function unwrap(res) {

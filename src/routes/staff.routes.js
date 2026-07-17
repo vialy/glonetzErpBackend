@@ -13,6 +13,7 @@ import withdrawals from '../controllers/staff/withdrawals.controller.js';
 import staffMgmt from '../controllers/staff/staff.controller.js';
 import settings from '../controllers/staff/settings.controller.js';
 import expenses from '../controllers/staff/expenses.controller.js';
+import apiLogs from '../controllers/staff/apiLogs.controller.js';
 
 const router = express.Router();
 
@@ -109,5 +110,9 @@ router.patch('/staff/:staffId/enable', staffMgmt.enable);
 // Settings — admin only
 router.get('/settings', adminOnly(), settings.get);
 router.patch('/settings', adminOnly(), settings.update);
+
+// API logs (third-party call audit trail, 30-day retention). Any staff.
+router.get('/api-logs', apiLogs.list);
+router.get('/api-logs/:apiLogId', apiLogs.getOne);
 
 export default router;

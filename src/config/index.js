@@ -163,7 +163,12 @@ export const ID_PREFIXES = Object.freeze({
   withdrawalAccount: 'WDA',
   expense: 'EXP',
   classEnrollment: 'ENR',
+  apiLog: 'LOG',
 });
+
+// How long API-call logs are retained. 30 days as requested by ops.
+// Enforced via a Mongo TTL index on `ApiLog.createdAt`.
+export const API_LOG_TTL_DAYS = 30;
 
 const config = {
   env: resolvedEnv,
@@ -279,6 +284,7 @@ const config = {
   NOTIFICATION_EVENTS,
   ERROR_CODES,
   ID_PREFIXES,
+  API_LOG_TTL_DAYS,
 };
 
 export default config;
